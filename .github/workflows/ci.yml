@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Syntax check
+        run: |
+          python -c "import main"
+          python -c "import db"
+          python -c "import agents.portfolio, agents.watchdog"
+          python -c "import strategies.types, strategies.store, strategies.engine"
+          python -c "import api.agent, api.strategy"
+        env:
+          CLAUDE_API_KEY: dummy
+          ALPACA_API_KEY: dummy
+          ALPACA_API_SECRET: dummy
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: lint-and-check
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t finly-agent:ci .
