@@ -3,9 +3,10 @@ SQLite 초기화 및 헬퍼
 - finly-backend의 in-memory dict와 달리 재시작 후에도 전략/로그가 유지됩니다.
 """
 
+import os
 import aiosqlite
 
-DB_PATH = "finly_agent.db"
+DB_PATH = os.getenv("DB_PATH", "finly_agent.db")
 
 
 async def init_db():
