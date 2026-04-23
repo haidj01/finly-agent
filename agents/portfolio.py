@@ -91,4 +91,4 @@ async def run_portfolio_analysis():
         )
         await db.commit()
 
-    print(f"[Portfolio] 리포트 저장 완료")
+    print("[Portfolio] 리포트 저장 완료")
