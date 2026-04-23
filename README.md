@@ -63,6 +63,8 @@ finly-agent/
 
 ```bash
 # 의존성 설치
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 환경 변수 설정
