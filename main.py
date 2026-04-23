@@ -1,4 +1,5 @@
 import os
+import pathlib
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -59,3 +60,9 @@ async def shutdown():
 def health():
     jobs = [{"id": j.id, "next_run": str(j.next_run_time)} for j in scheduler.get_jobs()]
     return {"status": "ok", "scheduled_jobs": jobs}
+
+
+@app.get("/version")
+def version():
+    v = (pathlib.Path(__file__).parent / "version.txt").read_text().strip()
+    return {"service": "finly-agent", "version": v}
