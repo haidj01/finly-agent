@@ -85,3 +85,46 @@ async def update_watchdog(req: WatchdogConfig):
 async def trigger_watchdog():
     await run_watchdog()
     return {"message": "워치독 실행 완료"}
+
+
+# ── Trade History ──────────────────────────────────────────────
+
+@router.get("/trade-history")
+async def get_trade_history(limit: int = 50, offset: int = 0, status: str = "", symbol: str = ""):
+    conditions = []
+    params: list = []
+
+    if status:
+        conditions.append("sl.status = ?")
+        params.append(status)
+    if symbol:
+        conditions.append("sl.symbol = ?")
+        params.append(symbol.upper())
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    query = f"""
+        SELECT
+            sl.id, sl.strategy_id, sl.time, sl.symbol, sl.side, sl.qty,
+            sl.reason, sl.status, sl.order_id, sl.error,
+            COALESCE(s.name, CASE WHEN sl.strategy_id = 'watchdog' THEN '워치독' ELSE sl.strategy_id END) AS strategy_name,
+            COALESCE(s.type, CASE WHEN sl.strategy_id = 'watchdog' THEN 'watchdog' ELSE '' END) AS strategy_type
+        FROM strategy_logs sl
+        LEFT JOIN strategies s ON sl.strategy_id = s.id
+        {where}
+        ORDER BY sl.time DESC
+        LIMIT ? OFFSET ?
+    """
+    params += [limit, offset]
+
+    count_query = f"SELECT COUNT(*) FROM strategy_logs sl {where}"
+    count_params = params[:-2]
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(query, params)
+        rows = [dict(r) for r in await cur.fetchall()]
+        cur2 = await db.execute(count_query, count_params)
+        total = (await cur2.fetchone())[0]
+
+    return {"total": total, "items": rows}
