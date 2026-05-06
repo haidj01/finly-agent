@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/haidj01/finly-agent/compare/v0.2.0...v0.3.0) (2026-05-06)
+
+
+### Features
+
+* add trade history endpoint with strategy metadata ([7670a1a](https://github.com/haidj01/finly-agent/commit/7670a1aa438cb3459148a0a81a7e2b29dcc39d5a))
+* add trade history endpoint with strategy metadata ([eb0e9a4](https://github.com/haidj01/finly-agent/commit/eb0e9a4374888a332d06181edc2c4872b4e11b71))
+
+
+### Bug Fixes
+
+* read DB_PATH from environment variable for persistent storage ([3b4035c](https://github.com/haidj01/finly-agent/commit/3b4035cee65dd923a225f8370f9f33dea57e54d7))
+
 ## [0.2.0](https://github.com/haidj01/finly-agent/compare/v0.1.0...v0.2.0) (2026-04-23)
 
 
