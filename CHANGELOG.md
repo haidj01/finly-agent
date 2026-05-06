@@ -1,6 +1,16 @@
 # Changelog
 
+<<<<<<< release-please--branches--main
+## [0.3.0](https://github.com/haidj01/finly-agent/compare/v0.2.0...v0.3.0) (2026-05-06)
+
+
+### Features
+
+* add trade history endpoint with strategy metadata ([7670a1a](https://github.com/haidj01/finly-agent/commit/7670a1aa438cb3459148a0a81a7e2b29dcc39d5a))
+* add trade history endpoint with strategy metadata ([eb0e9a4](https://github.com/haidj01/finly-agent/commit/eb0e9a4374888a332d06181edc2c4872b4e11b71))
+=======
 ## [0.2.1](https://github.com/haidj01/finly-agent/compare/v0.2.0...v0.2.1) (2026-04-23)
+>>>>>>> main
 
 
 ### Bug Fixes
