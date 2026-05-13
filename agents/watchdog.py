@@ -13,7 +13,7 @@ import aiosqlite
 from db import DB_PATH
 from alpaca_cfg import trading_url, alpaca_headers
 
-CONFIG_PATH    = Path("watchdog_config.json")
+CONFIG_PATH    = Path(DB_PATH).parent / "watchdog_config.json"
 DEFAULT_CONFIG = {"enabled": False, "drop_pct": 5.0, "max_sell_qty": 10}
 
 
