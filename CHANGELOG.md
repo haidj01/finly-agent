@@ -1,6 +1,19 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.6.0](https://github.com/haidj01/finly-agent/compare/v0.5.0...v0.6.0) (2026-05-13)
+
+
+### Features
+
+* add GET/PUT /market/trading-mode endpoints ([a7ae77c](https://github.com/haidj01/finly-agent/commit/a7ae77cb49f78c5f1c2dda0f523bd8103d8e31d6))
+* trade history, strategy engine, market regime, and live/paper trading mode ([4b7d2f1](https://github.com/haidj01/finly-agent/commit/4b7d2f145ff97bb931eb3ef0772958c684ede094))
+
+
+### Bug Fixes
+
+* persist watchdog config to /data alongside the database ([40ef70a](https://github.com/haidj01/finly-agent/commit/40ef70ada570513faacc6aab00b423611bdb7f68))
+
 ## [0.5.0](https://github.com/haidj01/finly-agent/compare/v0.4.0...v0.5.0) (2026-05-13)
 
 
