@@ -13,8 +13,10 @@ from db import init_db
 from agents.portfolio import run_portfolio_analysis
 from agents.watchdog import run_watchdog
 from strategies.engine import run_strategy_engine
+from market.regime import classify_market_regime
 from api.agent import router as agent_router
 from api.strategy import router as strategy_router
+from api.market import router as market_router
 
 app = FastAPI(title="Finly Agent", description="자율 매매 에이전트 서비스")
 
@@ -27,6 +29,7 @@ app.add_middleware(
 
 app.include_router(agent_router)
 app.include_router(strategy_router)
+app.include_router(market_router)
 
 scheduler = AsyncIOScheduler(timezone="America/New_York")
 
@@ -35,6 +38,12 @@ scheduler = AsyncIOScheduler(timezone="America/New_York")
 async def startup():
     await init_db()
 
+    # 시장 국면 분류: 매일 08:00 ET (장 시작 전 워밍업)
+    scheduler.add_job(
+        classify_market_regime,
+        CronTrigger(hour=8, minute=0, timezone="America/New_York"),
+        id="market_regime",
+    )
     # 포트폴리오 분석: 매일 08:30 ET
     scheduler.add_job(
         run_portfolio_analysis,
@@ -47,6 +56,7 @@ async def startup():
 
     scheduler.start()
     print("[finly-agent] 시작됨 — http://localhost:8001")
+    print("  · 시장 국면 분류: 매일 08:00 ET")
     print("  · 포트폴리오 분석: 매일 08:30 ET")
     print("  · 워치독 / 전략엔진: 5분 간격")
 
