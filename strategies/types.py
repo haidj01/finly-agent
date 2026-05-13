@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 StrategyType = Literal["stop_loss", "take_profit", "price_target", "trailing_stop", "rsi_threshold", "ma_cross", "bollinger_band"]
 QtyType      = Literal["shares", "all"]
 Direction    = Literal["above", "below"]
+AccountMode  = Literal["paper", "live"]
 
 
 class StrategyAction(BaseModel):
@@ -13,20 +14,22 @@ class StrategyAction(BaseModel):
 
 
 class CreateStrategyRequest(BaseModel):
-    name:      str           = Field(..., min_length=1, max_length=50)
-    symbol:    str           = Field(..., min_length=1, max_length=10)
-    type:      StrategyType
-    condition: dict
-    action:    StrategyAction
-    enabled:   bool = True
+    name:         str              = Field(..., min_length=1, max_length=50)
+    symbol:       str              = Field(..., min_length=1, max_length=10)
+    type:         StrategyType
+    condition:    dict
+    action:       StrategyAction
+    enabled:      bool             = True
+    account_mode: Optional[AccountMode] = None  # None → caller resolves to current trading mode
 
 
 class StrategyRow(BaseModel):
-    id:         str
-    name:       str
-    symbol:     str
-    type:       str
-    condition:  dict
-    action:     dict
-    enabled:    bool
-    created_at: str
+    id:           str
+    name:         str
+    symbol:       str
+    type:         str
+    condition:    dict
+    action:       dict
+    enabled:      bool
+    created_at:   str
+    account_mode: str

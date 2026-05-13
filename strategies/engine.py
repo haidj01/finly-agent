@@ -9,15 +9,17 @@ from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
 from strategies.bb import calc_bollinger
 from market.regime import classify_market_regime
-from alpaca_cfg import trading_url, alpaca_headers
+from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 
 DATA = "https://data.alpaca.markets"
 
 
 async def run_strategy_engine():
-    strategies = [s for s in await list_strategies() if s["enabled"]]
+    mode = get_trading_mode()
+    strategies = [s for s in await list_strategies(mode=mode) if s["enabled"]]
     if not strategies:
         return
+    print(f"[Strategy Engine] 계정 모드: {mode} | 활성 전략 {len(strategies)}개")
 
     async with httpx.AsyncClient(timeout=30) as client:
         # 장 운영 여부

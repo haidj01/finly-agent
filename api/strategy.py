@@ -1,18 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 
-from strategies.types import CreateStrategyRequest
+from strategies.types import CreateStrategyRequest, AccountMode
 from strategies.store import (
     list_strategies, get_strategy, create_strategy,
     toggle_strategy, delete_strategy
 )
 from strategies.engine import run_strategy_engine
+from alpaca_cfg import get_trading_mode
 
 router = APIRouter(prefix="/api/strategy")
 
 
 @router.get("")
-async def api_list():
-    return await list_strategies()
+async def api_list(mode: Optional[AccountMode] = Query(None, description="paper | live (미지정 시 전체)")):
+    return await list_strategies(mode=mode)
 
 
 @router.post("")
@@ -21,7 +23,8 @@ async def api_create(req: CreateStrategyRequest):
         raise HTTPException(400, "qty_type=shares 일 때 qty 필수")
     if req.action.side == "buy" and req.action.qty_type == "all":
         raise HTTPException(400, "buy 전략에 qty_type=all은 사용 불가")
-    strategy = await create_strategy(req)
+    account_mode = req.account_mode or get_trading_mode()
+    strategy = await create_strategy(req, account_mode=account_mode)
     return {"message": "전략 등록 완료", "strategy": strategy}
 
 

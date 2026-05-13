@@ -14,15 +14,16 @@ async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS strategies (
-                id          TEXT PRIMARY KEY,
-                name        TEXT NOT NULL,
-                symbol      TEXT NOT NULL,
-                type        TEXT NOT NULL,
-                condition   TEXT NOT NULL,   -- JSON
-                action      TEXT NOT NULL,   -- JSON
-                enabled     INTEGER NOT NULL DEFAULT 1,
-                created_at  TEXT NOT NULL,
-                peak_price  REAL
+                id           TEXT PRIMARY KEY,
+                name         TEXT NOT NULL,
+                symbol       TEXT NOT NULL,
+                type         TEXT NOT NULL,
+                condition    TEXT NOT NULL,   -- JSON
+                action       TEXT NOT NULL,   -- JSON
+                enabled      INTEGER NOT NULL DEFAULT 1,
+                created_at   TEXT NOT NULL,
+                peak_price   REAL,
+                account_mode TEXT NOT NULL DEFAULT 'paper'
             );
 
             CREATE TABLE IF NOT EXISTS strategy_logs (
@@ -52,6 +53,7 @@ async def init_db():
         for migration in [
             "ALTER TABLE strategies ADD COLUMN peak_price REAL",
             "ALTER TABLE strategies ADD COLUMN ma_cross_state TEXT",
+            "ALTER TABLE strategies ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
         ]:
             try:
                 await db.execute(migration)
