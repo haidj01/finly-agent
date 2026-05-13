@@ -16,3 +16,20 @@ resource "aws_secretsmanager_secret" "alpaca_api_secret" {
   name                    = "finly/ALPACA_API_SECRET"
   recovery_window_in_days = 0
 }
+
+# Live trading credentials — already registered manually in Secrets Manager.
+# If recreating from scratch: terraform import aws_secretsmanager_secret.alpaca_live_key finly/ALPACA_LIVE_KEY
+resource "aws_secretsmanager_secret" "alpaca_live_key" {
+  name                    = "finly/ALPACA_LIVE_KEY"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret" "alpaca_live_secret" {
+  name                    = "finly/ALPACA_LIVE_SECRET"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret" "alpaca_mode" {
+  name                    = "finly/ALPACA_MODE"
+  recovery_window_in_days = 0
+}
