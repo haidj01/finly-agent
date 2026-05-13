@@ -4,7 +4,6 @@ Watchdog Agent
 설정은 watchdog_config.json 파일로 영속화.
 """
 
-import os
 import json
 import httpx
 from datetime import datetime, timezone
@@ -12,17 +11,10 @@ from pathlib import Path
 
 import aiosqlite
 from db import DB_PATH
+from alpaca_cfg import trading_url, alpaca_headers
 
-PAPER          = "https://paper-api.alpaca.markets"
 CONFIG_PATH    = Path("watchdog_config.json")
 DEFAULT_CONFIG = {"enabled": False, "drop_pct": 5.0, "max_sell_qty": 10}
-
-
-def _headers():
-    return {
-        "APCA-API-KEY-ID":     os.environ["ALPACA_API_KEY"],
-        "APCA-API-SECRET-KEY": os.environ["ALPACA_API_SECRET"],
-    }
 
 
 def load_config() -> dict:
@@ -41,11 +33,11 @@ async def run_watchdog():
         return
 
     async with httpx.AsyncClient(timeout=30) as client:
-        clock = await client.get(f"{PAPER}/v2/clock", headers=_headers())
+        clock = await client.get(f"{trading_url()}/v2/clock", headers=alpaca_headers())
         if clock.status_code != 200 or not clock.json().get("is_open"):
             return
 
-        pos_res = await client.get(f"{PAPER}/v2/positions", headers=_headers())
+        pos_res = await client.get(f"{trading_url()}/v2/positions", headers=alpaca_headers())
         if pos_res.status_code != 200:
             return
 
@@ -61,8 +53,8 @@ async def run_watchdog():
             reason = f"손실 {abs(drop_pct):.1f}% (임계값 {threshold}%)"
 
             order_res = await client.post(
-                f"{PAPER}/v2/orders",
-                headers=_headers(),
+                f"{trading_url()}/v2/orders",
+                headers=alpaca_headers(),
                 json={"symbol": sym, "qty": qty, "side": "sell",
                       "type": "market", "time_in_force": "day"},
             )

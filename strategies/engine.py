@@ -3,23 +3,15 @@ Strategy Execution Engine
 5분마다 활성화된 전략의 조건을 체크하고 조건 충족 시 주문 실행.
 """
 
-import os
 import httpx
 from strategies.store import list_strategies, append_log, toggle_strategy, update_peak_price, update_ma_cross_state
 from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
 from strategies.bb import calc_bollinger
 from market.regime import classify_market_regime
+from alpaca_cfg import trading_url, alpaca_headers
 
-PAPER = "https://paper-api.alpaca.markets"
-DATA  = "https://data.alpaca.markets"
-
-
-def _headers():
-    return {
-        "APCA-API-KEY-ID":     os.environ["ALPACA_API_KEY"],
-        "APCA-API-SECRET-KEY": os.environ["ALPACA_API_SECRET"],
-    }
+DATA = "https://data.alpaca.markets"
 
 
 async def run_strategy_engine():
@@ -29,7 +21,7 @@ async def run_strategy_engine():
 
     async with httpx.AsyncClient(timeout=30) as client:
         # 장 운영 여부
-        clock = await client.get(f"{PAPER}/v2/clock", headers=_headers())
+        clock = await client.get(f"{trading_url()}/v2/clock", headers=alpaca_headers())
         if clock.status_code != 200 or not clock.json().get("is_open"):
             return
 
@@ -39,7 +31,7 @@ async def run_strategy_engine():
         print(f"[Strategy Engine] 시장 국면: {regime_info.get('label', '?')} (size_factor={size_factor})")
 
         # 포지션 맵
-        pos_res = await client.get(f"{PAPER}/v2/positions", headers=_headers())
+        pos_res = await client.get(f"{trading_url()}/v2/positions", headers=alpaca_headers())
         positions = {p["symbol"]: p for p in (pos_res.json() if pos_res.status_code == 200 else [])}
 
         # 현재가 일괄 조회
@@ -47,7 +39,7 @@ async def run_strategy_engine():
         price_res = await client.get(
             f"{DATA}/v2/stocks/trades/latest",
             params={"symbols": ",".join(symbols), "feed": "iex"},
-            headers=_headers(),
+            headers=alpaca_headers(),
         )
         prices = {}
         if price_res.status_code == 200:
@@ -61,7 +53,7 @@ async def run_strategy_engine():
             bars_res = await client.get(
                 f"{DATA}/v2/stocks/bars",
                 params={"symbols": ",".join(bar_symbols), "timeframe": "1Day", "limit": 50, "sort": "asc"},
-                headers=_headers(),
+                headers=alpaca_headers(),
             )
             if bars_res.status_code == 200:
                 for sym, bars in bars_res.json().get("bars", {}).items():
@@ -142,8 +134,8 @@ async def run_strategy_engine():
 
             # 주문 실행
             order_res = await client.post(
-                f"{PAPER}/v2/orders",
-                headers=_headers(),
+                f"{trading_url()}/v2/orders",
+                headers=alpaca_headers(),
                 json={"symbol": sym, "qty": qty, "side": act["side"],
                       "type": "market", "time_in_force": "day"},
             )

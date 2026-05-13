@@ -4,13 +4,13 @@ SPY를 시장 프록시로 사용하여 현재 시장 국면을 분류.
 우선순위: 하락장 > 변동성장 > 추세장 > 횡보장
 """
 
-import os
 import httpx
 from datetime import datetime, timezone
 
 from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
 from strategies.bb import calc_bollinger
+from alpaca_cfg import alpaca_headers
 
 DATA = "https://data.alpaca.markets"
 
@@ -34,13 +34,6 @@ _TRENDING_RSI      = 55.0   # RSI > 55 → 상승 모멘텀
 _VOLATILE_BB_WIDTH = 8.0    # BB width % > 8% → 고변동성
 
 
-def _headers():
-    return {
-        "APCA-API-KEY-ID":     os.environ["ALPACA_API_KEY"],
-        "APCA-API-SECRET-KEY": os.environ["ALPACA_API_SECRET"],
-    }
-
-
 async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dict:
     """
     현재 시장 국면 분류.
@@ -54,7 +47,7 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
         bars_res = await client.get(
             f"{DATA}/v2/stocks/bars",
             params={"symbols": "SPY", "timeframe": "1Day", "limit": 50, "sort": "asc"},
-            headers=_headers(),
+            headers=alpaca_headers(),
         )
         if bars_res.status_code != 200:
             return _default("API 오류")

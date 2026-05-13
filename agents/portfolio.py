@@ -11,17 +11,10 @@ from datetime import datetime, timezone
 
 import aiosqlite
 from db import DB_PATH
+from alpaca_cfg import trading_url, alpaca_headers
 
-PAPER          = "https://paper-api.alpaca.markets"
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL   = "claude-sonnet-4-20250514"
-
-
-def _alpaca_headers():
-    return {
-        "APCA-API-KEY-ID":     os.environ["ALPACA_API_KEY"],
-        "APCA-API-SECRET-KEY": os.environ["ALPACA_API_SECRET"],
-    }
 
 
 def _claude_headers():
@@ -37,8 +30,8 @@ async def run_portfolio_analysis():
 
     async with httpx.AsyncClient(timeout=90) as client:
         acc_res, pos_res = await asyncio.gather(
-            client.get(f"{PAPER}/v2/account",  headers=_alpaca_headers()),
-            client.get(f"{PAPER}/v2/positions", headers=_alpaca_headers()),
+            client.get(f"{trading_url()}/v2/account",  headers=alpaca_headers()),
+            client.get(f"{trading_url()}/v2/positions", headers=alpaca_headers()),
         )
 
         account   = acc_res.json() if acc_res.status_code == 200 else {}
