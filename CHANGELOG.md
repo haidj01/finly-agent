@@ -1,6 +1,14 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.5.0](https://github.com/haidj01/finly-agent/compare/v0.4.0...v0.5.0) (2026-05-13)
+
+
+### Features
+
+* Alpaca live account support + live key CD injection ([8acb46c](https://github.com/haidj01/finly-agent/commit/8acb46c8c41d12dc2bdee20275087eebbfbeb1fb))
+* inject Alpaca live keys via Secrets Manager on every deploy ([996a673](https://github.com/haidj01/finly-agent/commit/996a6730a8ad9b615e279422c50c7ea7338ccbb6))
+
 ## [0.4.0](https://github.com/haidj01/finly-agent/compare/v0.3.0...v0.4.0) (2026-05-13)
 
 
