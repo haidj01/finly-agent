@@ -44,6 +44,23 @@ jobs:
           echo "$SSH_KEY" > /tmp/finly.pem
           chmod 600 /tmp/finly.pem
           ssh -o StrictHostKeyChecking=no -i /tmp/finly.pem $EC2_USER@$EC2_IP << 'ENDSSH'
+            ALPACA_LIVE_KEY=$(aws secretsmanager get-secret-value \
+              --secret-id finly/ALPACA_LIVE_KEY --region us-east-1 \
+              --query SecretString --output text)
+            ALPACA_LIVE_SECRET=$(aws secretsmanager get-secret-value \
+              --secret-id finly/ALPACA_LIVE_SECRET --region us-east-1 \
+              --query SecretString --output text)
+            ALPACA_MODE=$(aws ssm get-parameter --name /finly/ALPACA_MODE \
+              --with-decryption --region us-east-1 \
+              --query Parameter.Value --output text 2>/dev/null || echo "paper")
+            printf 'services:\n  finly-agent:\n    environment:\n' \
+              > /opt/finly/docker-compose.override.yml
+            printf '      - ALPACA_LIVE_KEY=%s\n' "$ALPACA_LIVE_KEY" \
+              >> /opt/finly/docker-compose.override.yml
+            printf '      - ALPACA_LIVE_SECRET=%s\n' "$ALPACA_LIVE_SECRET" \
+              >> /opt/finly/docker-compose.override.yml
+            printf '      - ALPACA_MODE=%s\n' "$ALPACA_MODE" \
+              >> /opt/finly/docker-compose.override.yml
             aws ecr get-login-password --region us-east-1 | \
               docker login --username AWS --password-stdin 979126074847.dkr.ecr.us-east-1.amazonaws.com
             cd /opt/finly
