@@ -21,7 +21,8 @@ async def init_db():
                 condition   TEXT NOT NULL,   -- JSON
                 action      TEXT NOT NULL,   -- JSON
                 enabled     INTEGER NOT NULL DEFAULT 1,
-                created_at  TEXT NOT NULL
+                created_at  TEXT NOT NULL,
+                peak_price  REAL
             );
 
             CREATE TABLE IF NOT EXISTS strategy_logs (
@@ -47,6 +48,16 @@ async def init_db():
             );
         """)
         await db.commit()
+        # 기존 DB 마이그레이션: peak_price 컬럼 추가
+        for migration in [
+            "ALTER TABLE strategies ADD COLUMN peak_price REAL",
+            "ALTER TABLE strategies ADD COLUMN ma_cross_state TEXT",
+        ]:
+            try:
+                await db.execute(migration)
+                await db.commit()
+            except Exception:
+                pass  # 이미 존재하면 무시
 
 
 async def get_db():

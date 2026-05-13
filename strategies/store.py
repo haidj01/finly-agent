@@ -77,6 +77,18 @@ async def toggle_strategy(sid: str) -> dict | None:
     return await get_strategy(sid)
 
 
+async def update_peak_price(sid: str, price: float) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE strategies SET peak_price=? WHERE id=?", (price, sid))
+        await db.commit()
+
+
+async def update_ma_cross_state(sid: str, state: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE strategies SET ma_cross_state=? WHERE id=?", (state, sid))
+        await db.commit()
+
+
 async def delete_strategy(sid: str) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute("DELETE FROM strategies WHERE id=?", (sid,))
