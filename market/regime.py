@@ -8,12 +8,12 @@ import logging
 import httpx
 from datetime import datetime, timezone
 
-logger = logging.getLogger(__name__)
-
 from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
 from strategies.bb import calc_bollinger
 from alpaca_cfg import alpaca_headers
+
+logger = logging.getLogger(__name__)
 
 DATA = "https://data.alpaca.markets"
 
