@@ -1,6 +1,14 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.10.0](https://github.com/haidj01/finly-agent/compare/v0.9.0...v0.10.0) (2026-05-14)
+
+
+### Features
+
+* add Claude-powered regime strategy recommendations endpoint ([679db73](https://github.com/haidj01/finly-agent/commit/679db7358cf2f6e6e35788c96cb57ba6f58ef702))
+* proxy regime-recommendations from finly-agent ([9b32e31](https://github.com/haidj01/finly-agent/commit/9b32e317d3b795fe01fea126650b41765cefdb8c))
+
 ## [0.9.0](https://github.com/haidj01/finly-agent/compare/v0.8.0...v0.9.0) (2026-05-14)
 
 
