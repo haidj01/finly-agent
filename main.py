@@ -15,6 +15,7 @@ from agents.watchdog import run_watchdog
 from strategies.engine import run_strategy_engine
 from market.regime import classify_market_regime
 from api.agent import router as agent_router
+from api.alpaca import router as alpaca_router
 from api.strategy import router as strategy_router
 from api.market import router as market_router
 
@@ -23,11 +24,12 @@ app = FastAPI(title="Finly Agent", description="자율 매매 에이전트 서�
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("ALLOWED_ORIGIN", "http://localhost:8000")],
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "PUT"],
     allow_headers=["Content-Type"],
 )
 
 app.include_router(agent_router)
+app.include_router(alpaca_router)
 app.include_router(strategy_router)
 app.include_router(market_router)
 
