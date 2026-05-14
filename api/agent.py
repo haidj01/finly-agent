@@ -90,7 +90,7 @@ async def trigger_watchdog():
 # ── Trade History ──────────────────────────────────────────────
 
 @router.get("/trade-history")
-async def get_trade_history(limit: int = 50, offset: int = 0, status: str = "", symbol: str = "", mode: str = ""):
+async def get_trade_history(limit: int = 50, offset: int = 0, status: str = "", symbol: str = "", mode: str = "", source: str = ""):
     conditions = []
     params: list = []
 
@@ -103,6 +103,10 @@ async def get_trade_history(limit: int = 50, offset: int = 0, status: str = "", 
     if mode:
         conditions.append("sl.account_mode = ?")
         params.append(mode)
+    if source == "watchdog":
+        conditions.append("sl.strategy_id = 'watchdog'")
+    elif source == "strategy":
+        conditions.append("sl.strategy_id != 'watchdog'")
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
