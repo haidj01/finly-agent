@@ -66,7 +66,7 @@ async def run_strategy_engine():
         if bar_symbols:
             bars_res = await client.get(
                 f"{DATA}/v2/stocks/bars",
-                params={"symbols": ",".join(bar_symbols), "timeframe": "1Day", "limit": 50, "sort": "asc"},
+                params={"symbols": ",".join(bar_symbols), "timeframe": "1Day", "limit": 50, "sort": "asc", "feed": "iex"},
                 headers=alpaca_headers(),
             )
             if bars_res.status_code == 200:
