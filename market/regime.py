@@ -4,8 +4,11 @@ SPY를 시장 프록시로 사용하여 현재 시장 국면을 분류.
 우선순위: 하락장 > 변동성장 > 추세장 > 횡보장
 """
 
+import logging
 import httpx
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
@@ -46,14 +49,16 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
     try:
         bars_res = await client.get(
             f"{DATA}/v2/stocks/bars",
-            params={"symbols": "SPY", "timeframe": "1Day", "limit": 50, "sort": "asc"},
+            params={"symbols": "SPY", "timeframe": "1Day", "limit": 50, "sort": "asc", "feed": "iex"},
             headers=alpaca_headers(),
         )
         if bars_res.status_code != 200:
+            logger.warning("Alpaca bars API error: %s %s", bars_res.status_code, bars_res.text)
             return _default("API 오류")
 
         bars = bars_res.json().get("bars", {}).get("SPY", [])
         if len(bars) < 20:
+            logger.warning("Alpaca bars insufficient data: got %d bars (need 20)", len(bars))
             return _default("데이터 부족")
 
         closes  = [b["c"] for b in bars]
@@ -86,6 +91,9 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
             "updated_at":   datetime.now(timezone.utc).isoformat(),
         }
 
+    except Exception as e:
+        logger.exception("classify_market_regime unexpected error: %s", e)
+        return _default("내부 오류")
     finally:
         if own_client:
             await client.aclose()
