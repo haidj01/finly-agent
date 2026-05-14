@@ -28,8 +28,10 @@ def trading_url() -> str:
 
 def alpaca_headers() -> dict:
     if get_trading_mode() == "live":
-        key    = os.environ["ALPACA_LIVE_KEY"]
-        secret = os.environ["ALPACA_LIVE_SECRET"]
+        key    = os.environ.get("ALPACA_LIVE_KEY", "")
+        secret = os.environ.get("ALPACA_LIVE_SECRET", "")
+        if not key or not secret:
+            raise RuntimeError("ALPACA_LIVE_KEY / ALPACA_LIVE_SECRET not configured — add secrets to AWS Secrets Manager")
     else:
         key    = os.environ["ALPACA_API_KEY"]
         secret = os.environ["ALPACA_API_SECRET"]
