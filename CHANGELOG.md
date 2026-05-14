@@ -1,6 +1,14 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.0](https://github.com/haidj01/finly-agent/compare/v0.10.0...v0.11.0) (2026-05-14)
+
+
+### Features
+
+* add mode-aware Alpaca account/trading routes to agent ([2c16946](https://github.com/haidj01/finly-agent/commit/2c1694698fc7e853ad7e49668c147cf358fd96c3))
+* market regime filtering + AI recommendations + global trading mode ([cee40e8](https://github.com/haidj01/finly-agent/commit/cee40e88813d0d29dfa0d46dceff684632a13211))
+
 ## [0.10.0](https://github.com/haidj01/finly-agent/compare/v0.9.0...v0.10.0) (2026-05-14)
 
 
