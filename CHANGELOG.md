@@ -1,6 +1,14 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.8.0](https://github.com/haidj01/finly-agent/compare/v0.7.0...v0.8.0) (2026-05-14)
+
+
+### Features
+
+* add source filter (strategy/watchdog) to trade-history endpoint ([87e769a](https://github.com/haidj01/finly-agent/commit/87e769a6f1c6ab06c2ae869cd938e06ca0afb1a6))
+* add source filter to trade-history endpoint ([641da11](https://github.com/haidj01/finly-agent/commit/641da1113f7016f169031cf5387cc75d41296a13))
+
 ## [0.7.0](https://github.com/haidj01/finly-agent/compare/v0.6.0...v0.7.0) (2026-05-14)
 
 
