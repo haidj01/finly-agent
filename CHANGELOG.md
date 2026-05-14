@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.7.0](https://github.com/haidj01/finly-agent/compare/v0.6.0...v0.7.0) (2026-05-14)
+
+
+### Features
+
+* separate strategy management per account mode (paper / live) ([a8b2e3b](https://github.com/haidj01/finly-agent/commit/a8b2e3b8778d078fa948074ca0bd911a00583baa))
+
 ## [0.6.0](https://github.com/haidj01/finly-agent/compare/v0.5.0...v0.6.0) (2026-05-13)
 
 
