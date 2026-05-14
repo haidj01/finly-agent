@@ -11,7 +11,7 @@ from pathlib import Path
 
 import aiosqlite
 from db import DB_PATH
-from alpaca_cfg import trading_url, alpaca_headers
+from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 
 CONFIG_PATH    = Path(DB_PATH).parent / "watchdog_config.json"
 DEFAULT_CONFIG = {"enabled": False, "drop_pct": 5.0, "max_sell_qty": 10}
@@ -66,10 +66,10 @@ async def run_watchdog():
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
                     """INSERT INTO strategy_logs
-                       (strategy_id, time, symbol, side, qty, reason, status, order_id, error)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                       (strategy_id, time, symbol, side, qty, reason, status, order_id, error, account_mode)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     ("watchdog", datetime.now(timezone.utc).isoformat(),
-                     sym, "sell", qty, reason, status, order_id, error),
+                     sym, "sell", qty, reason, status, order_id, error, get_trading_mode()),
                 )
                 await db.commit()
 

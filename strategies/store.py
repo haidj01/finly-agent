@@ -102,13 +102,13 @@ async def delete_strategy(sid: str) -> bool:
 
 
 async def append_log(sid: str, symbol: str, side: str, qty: int,
-                     reason: str, status: str, order_id=None, error=None):
+                     reason: str, status: str, order_id=None, error=None, account_mode: str = "paper"):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO strategy_logs
-               (strategy_id, time, symbol, side, qty, reason, status, order_id, error)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+               (strategy_id, time, symbol, side, qty, reason, status, order_id, error, account_mode)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (sid, datetime.now(timezone.utc).isoformat(),
-             symbol, side, qty, reason, status, order_id, error),
+             symbol, side, qty, reason, status, order_id, error, account_mode),
         )
         await db.commit()
