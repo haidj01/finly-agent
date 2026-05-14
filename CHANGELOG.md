@@ -1,6 +1,14 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.1](https://github.com/haidj01/finly-agent/compare/v0.11.0...v0.11.1) (2026-05-14)
+
+
+### Bug Fixes
+
+* move logger after imports to satisfy ruff E402 ([38329ba](https://github.com/haidj01/finly-agent/commit/38329ba3ccc98b38315d03349d7d6d75924ae3b6))
+* use IEX feed for bars API and add regime error logging ([#28](https://github.com/haidj01/finly-agent/issues/28)) ([2dae21d](https://github.com/haidj01/finly-agent/commit/2dae21db7b54acbe0f99d29971e79c490f5f58dc))
+
 ## [0.11.0](https://github.com/haidj01/finly-agent/compare/v0.10.0...v0.11.0) (2026-05-14)
 
 
