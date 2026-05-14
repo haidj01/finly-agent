@@ -126,7 +126,7 @@ async def run_strategy_engine():
             # 수량 결정
             if act["qty_type"] == "all":
                 if not pos:
-                    await append_log(sid, sym, act["side"], 0, reason, "skipped", error="포지션 없음")
+                    await append_log(sid, sym, act["side"], 0, reason, "skipped", error="포지션 없음", account_mode=mode)
                     continue
                 qty = int(float(pos["qty"]))
             else:
@@ -144,14 +144,14 @@ async def run_strategy_engine():
 
             if order_res.status_code == 200:
                 await append_log(sid, sym, act["side"], qty, reason, "executed",
-                                 order_id=order_res.json().get("id"))
+                                 order_id=order_res.json().get("id"), account_mode=mode)
                 # 1회 실행 후 비활성화
                 if stype in ("take_profit", "price_target", "trailing_stop", "rsi_threshold", "ma_cross", "bollinger_band"):
                     await toggle_strategy(sid)
                 print(f"[Strategy] ✅ {sym} {act['side']} {qty}주 | {reason}")
             else:
                 await append_log(sid, sym, act["side"], qty, reason, "failed",
-                                 error=order_res.text)
+                                 error=order_res.text, account_mode=mode)
                 print(f"[Strategy] ❌ {sym} {act['side']} 실패 | {order_res.text}")
 
 

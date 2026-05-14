@@ -54,6 +54,7 @@ async def init_db():
             "ALTER TABLE strategies ADD COLUMN peak_price REAL",
             "ALTER TABLE strategies ADD COLUMN ma_cross_state TEXT",
             "ALTER TABLE strategies ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
+            "ALTER TABLE strategy_logs ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
         ]:
             try:
                 await db.execute(migration)
