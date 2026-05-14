@@ -1,6 +1,14 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.9.0](https://github.com/haidj01/finly-agent/compare/v0.8.0...v0.9.0) (2026-05-14)
+
+
+### Features
+
+* A+B market regime strategy filtering ([1808d59](https://github.com/haidj01/finly-agent/commit/1808d59bf4d194a9976c868fc0f6f44a34f42726))
+* implement A+B market regime strategy filtering ([ca5a766](https://github.com/haidj01/finly-agent/commit/ca5a7664d385ad223c8d0c9b2a71ae540d7687da))
+
 ## [0.8.0](https://github.com/haidj01/finly-agent/compare/v0.7.0...v0.8.0) (2026-05-14)
 
 
