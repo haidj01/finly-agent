@@ -18,6 +18,16 @@ def _row_to_dict(row, cursor) -> dict:
     return d
 
 
+def _parse_strategy_row(r) -> dict:
+    d = {**dict(r),
+         "condition": json.loads(r["condition"]),
+         "action":    json.loads(r["action"]),
+         "enabled":   bool(r["enabled"])}
+    raw = d.get("allowed_regimes")
+    d["allowed_regimes"] = json.loads(raw) if raw else None
+    return d
+
+
 async def list_strategies(mode: str | None = None) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -28,13 +38,7 @@ async def list_strategies(mode: str | None = None) -> list[dict]:
         else:
             cur = await db.execute("SELECT * FROM strategies ORDER BY created_at DESC")
         rows = await cur.fetchall()
-        return [
-            {**dict(r),
-             "condition": json.loads(r["condition"]),
-             "action":    json.loads(r["action"]),
-             "enabled":   bool(r["enabled"])}
-            for r in rows
-        ]
+        return [_parse_strategy_row(r) for r in rows]
 
 
 async def get_strategy(sid: str) -> dict | None:
@@ -44,10 +48,7 @@ async def get_strategy(sid: str) -> dict | None:
         row = await cur.fetchone()
         if not row:
             return None
-        s = {**dict(row),
-             "condition": json.loads(row["condition"]),
-             "action":    json.loads(row["action"]),
-             "enabled":   bool(row["enabled"])}
+        s = _parse_strategy_row(row)
         log_cur = await db.execute(
             "SELECT * FROM strategy_logs WHERE strategy_id=? ORDER BY time DESC LIMIT 50", (sid,)
         )
@@ -58,13 +59,15 @@ async def get_strategy(sid: str) -> dict | None:
 async def create_strategy(req, account_mode: str) -> dict:
     sid = str(uuid.uuid4())[:8]
     now = datetime.now(timezone.utc).isoformat()
+    allowed_regimes_json = json.dumps(req.allowed_regimes) if req.allowed_regimes else None
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO strategies (id, name, symbol, type, condition, action, enabled, created_at, account_mode)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO strategies
+               (id, name, symbol, type, condition, action, enabled, created_at, account_mode, allowed_regimes)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (sid, req.name, req.symbol.upper(), req.type,
              json.dumps(req.condition), json.dumps(req.action.model_dump()),
-             int(req.enabled), now, account_mode),
+             int(req.enabled), now, account_mode, allowed_regimes_json),
         )
         await db.commit()
     return await get_strategy(sid)
