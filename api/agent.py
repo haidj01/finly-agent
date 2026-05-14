@@ -87,6 +87,17 @@ async def trigger_watchdog():
     return {"message": "워치독 실행 완료"}
 
 
+# ── Strategy Recommendations ──────────────────────────────────
+
+@router.get("/regime-recommendations")
+async def get_regime_recommendations(symbol: str = ""):
+    from agents.recommender import generate_recommendations
+    try:
+        return await generate_recommendations(symbol.upper() if symbol else None)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # ── Trade History ──────────────────────────────────────────────
 
 @router.get("/trade-history")
