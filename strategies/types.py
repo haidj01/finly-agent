@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 StrategyType = Literal["stop_loss", "take_profit", "price_target", "trailing_stop", "rsi_threshold", "ma_cross", "bollinger_band"]
@@ -13,23 +13,28 @@ class StrategyAction(BaseModel):
     qty_type: QtyType = "shares"
 
 
+MarketRegime = Literal["bearish", "volatile", "trending", "ranging"]
+
+
 class CreateStrategyRequest(BaseModel):
-    name:         str              = Field(..., min_length=1, max_length=50)
-    symbol:       str              = Field(..., min_length=1, max_length=10)
-    type:         StrategyType
-    condition:    dict
-    action:       StrategyAction
-    enabled:      bool             = True
-    account_mode: Optional[AccountMode] = None  # None → caller resolves to current trading mode
+    name:            str                       = Field(..., min_length=1, max_length=50)
+    symbol:          str                       = Field(..., min_length=1, max_length=10)
+    type:            StrategyType
+    condition:       dict
+    action:          StrategyAction
+    enabled:         bool                      = True
+    account_mode:    Optional[AccountMode]     = None  # None → caller resolves to current trading mode
+    allowed_regimes: Optional[List[MarketRegime]] = None  # None → no regime restriction
 
 
 class StrategyRow(BaseModel):
-    id:           str
-    name:         str
-    symbol:       str
-    type:         str
-    condition:    dict
-    action:       dict
-    enabled:      bool
-    created_at:   str
-    account_mode: str
+    id:              str
+    name:            str
+    symbol:          str
+    type:            str
+    condition:       dict
+    action:          dict
+    enabled:         bool
+    created_at:      str
+    account_mode:    str
+    allowed_regimes: Optional[List[str]] = None

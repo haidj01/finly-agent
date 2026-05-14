@@ -13,6 +13,18 @@ from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 
 DATA = "https://data.alpaca.markets"
 
+# A: 시장 국면별 엔진 수준 강제 차단 (type, side) 조합
+# bearish: 추세 추종 매수 전략 차단 (손절/익절/trailing은 유지)
+# volatile: MA크로스 신뢰도 낮음
+# trending: 박스권 전략(볼린저) 부적합
+# ranging: 추세 추종 전략 부적합
+REGIME_HARD_BLOCK: dict[str, set[tuple[str, str]]] = {
+    "bearish":  {("ma_cross", "buy"), ("price_target", "buy"), ("rsi_threshold", "buy")},
+    "volatile": {("ma_cross", "buy"), ("ma_cross", "sell")},
+    "trending": {("bollinger_band", "buy"), ("bollinger_band", "sell")},
+    "ranging":  {("ma_cross", "buy"), ("ma_cross", "sell"), ("trailing_stop", "sell")},
+}
+
 
 async def run_strategy_engine():
     mode = get_trading_mode()
@@ -71,6 +83,24 @@ async def run_strategy_engine():
             price = prices.get(sym)
 
             if not price:
+                continue
+
+            current_regime = regime_info.get("regime", "")
+
+            # A: 엔진 수준 강제 차단
+            blocked = REGIME_HARD_BLOCK.get(current_regime, set())
+            if (stype, act["side"]) in blocked:
+                await append_log(sid, sym, act["side"], 0,
+                                 f"시장 국면 차단 ({regime_info.get('label', current_regime)})",
+                                 "skipped", account_mode=mode)
+                continue
+
+            # B: 전략별 허용 국면 체크
+            allowed_regimes = s.get("allowed_regimes")
+            if allowed_regimes and current_regime and current_regime not in allowed_regimes:
+                await append_log(sid, sym, act["side"], 0,
+                                 f"허용되지 않은 국면 ({regime_info.get('label', current_regime)})",
+                                 "skipped", account_mode=mode)
                 continue
 
             # Trailing Stop: 고점 갱신

@@ -55,6 +55,7 @@ async def init_db():
             "ALTER TABLE strategies ADD COLUMN ma_cross_state TEXT",
             "ALTER TABLE strategies ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
             "ALTER TABLE strategy_logs ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
+            "ALTER TABLE strategies ADD COLUMN allowed_regimes TEXT DEFAULT NULL",
         ]:
             try:
                 await db.execute(migration)
