@@ -18,10 +18,15 @@ def _row_to_dict(row, cursor) -> dict:
     return d
 
 
-async def list_strategies() -> list[dict]:
+async def list_strategies(mode: str | None = None) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM strategies ORDER BY created_at DESC")
+        if mode:
+            cur = await db.execute(
+                "SELECT * FROM strategies WHERE account_mode=? ORDER BY created_at DESC", (mode,)
+            )
+        else:
+            cur = await db.execute("SELECT * FROM strategies ORDER BY created_at DESC")
         rows = await cur.fetchall()
         return [
             {**dict(r),
@@ -50,16 +55,16 @@ async def get_strategy(sid: str) -> dict | None:
         return s
 
 
-async def create_strategy(req) -> dict:
+async def create_strategy(req, account_mode: str) -> dict:
     sid = str(uuid.uuid4())[:8]
     now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO strategies (id, name, symbol, type, condition, action, enabled, created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
+            """INSERT INTO strategies (id, name, symbol, type, condition, action, enabled, created_at, account_mode)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (sid, req.name, req.symbol.upper(), req.type,
              json.dumps(req.condition), json.dumps(req.action.model_dump()),
-             int(req.enabled), now),
+             int(req.enabled), now, account_mode),
         )
         await db.commit()
     return await get_strategy(sid)
