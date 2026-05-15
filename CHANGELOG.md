@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.4](https://github.com/haidj01/finly-agent/compare/v0.11.3...v0.11.4) (2026-05-15)
+
+
+### Bug Fixes
+
+* security hardening, stability fixes, and regime classification improvement ([#33](https://github.com/haidj01/finly-agent/issues/33)) ([aeaeefa](https://github.com/haidj01/finly-agent/commit/aeaeefa3d1a557dfb646e6a6e265eca4ac880fa6))
+
 ## [0.11.3](https://github.com/haidj01/finly-agent/compare/v0.11.2...v0.11.3) (2026-05-15)
 
 
