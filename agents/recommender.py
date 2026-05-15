@@ -38,7 +38,7 @@ _FALLBACK: dict[str, list[dict]] = {
         {
             "type": "bollinger_band", "symbol": "SPY", "name": "변동성장 하단 매수",
             "condition": {"period": 20, "multiplier": 2.0, "direction": "below_lower"},
-            "action": {"side": "buy", "qty_type": "shares", "qty": 1},
+            "action": {"side": "buy", "qty_type": "notional", "qty": 500},
             "reason": "고변동성 구간에서 하단밴드 터치는 단기 반등 기회",
             "allowed_regimes": ["volatile"],
         },
@@ -63,7 +63,7 @@ _FALLBACK: dict[str, list[dict]] = {
         {
             "type": "rsi_threshold", "symbol": "SPY", "name": "횡보장 RSI 과매도 매수",
             "condition": {"period": 14, "threshold": 30, "direction": "below"},
-            "action": {"side": "buy", "qty_type": "shares", "qty": 1},
+            "action": {"side": "buy", "qty_type": "notional", "qty": 500},
             "reason": "횡보 구간에서 RSI 30 이하는 단기 반등 기회",
             "allowed_regimes": ["ranging"],
         },
@@ -109,7 +109,7 @@ def _escape_prompt_field(text: str, max_len: int = 20) -> str:
 _VALID_TYPES    = frozenset({"stop_loss", "take_profit", "price_target", "trailing_stop",
                               "rsi_threshold", "ma_cross", "bollinger_band"})
 _VALID_SIDES    = frozenset({"buy", "sell"})
-_VALID_QTY_TYPES = frozenset({"shares", "all"})
+_VALID_QTY_TYPES = frozenset({"shares", "notional", "all"})
 _REQUIRED_FIELDS = ("type", "symbol", "name", "condition", "action", "reason")
 
 
@@ -175,12 +175,22 @@ def _validate_recommendations(items: list) -> list:
         if action.get("qty_type") == "shares":
             try:
                 qty = int(action["qty"]) if action.get("qty") is not None else 1
-                if qty < 1 or qty > 100:
+                if qty < 1 or qty > 1000:
                     logger.warning("추천[%d] qty 범위 초과: %d", i, qty)
                     continue
                 action["qty"] = qty
             except (ValueError, TypeError):
                 logger.warning("추천[%d] qty가 숫자가 아님: %r", i, action.get("qty"))
+                continue
+        elif action.get("qty_type") == "notional":
+            try:
+                notional = float(action["qty"])
+                if notional < 10.0 or notional > 5000.0:
+                    logger.warning("추천[%d] notional 범위 초과: %.2f", i, notional)
+                    continue
+                action["qty"] = round(notional, 2)
+            except (ValueError, TypeError):
+                logger.warning("추천[%d] notional이 숫자가 아님: %r", i, action.get("qty"))
                 continue
 
         if len(str(item.get("reason", ""))) > 300:
@@ -354,11 +364,13 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
     "symbol": "티커",
     "name": "전략명 (간결하게)",
     "condition": {{}},
-    "action": {{"side": "buy|sell", "qty_type": "shares|all", "qty": null}},
+    "action": {{"side": "buy|sell", "qty_type": "notional|shares|all", "qty": null}},
     "reason": "추천 이유 (1-2문장, 국면과의 연관성 포함)",
     "allowed_regimes": ["{regime}"]
   }}
 ]
+
+qty_type 규칙: 매수(buy)는 notional 우선($10-$5000). 전량 청산은 all(qty 불필요). 주식 수 지정이 꼭 필요한 경우만 shares(1-1000).
 
 condition 형식 (타입별):
 - stop_loss: {{"drop_pct": 5.0}}

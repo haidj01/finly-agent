@@ -1,6 +1,6 @@
 """
 MACD (Moving Average Convergence Divergence) calculation.
-Returns (macd_line, signal_line, histogram) or None if insufficient data.
+Returns (macd_line, signal_line, histogram_last, histogram_series) or None.
 Standard EMA: multiplier = 2 / (period + 1), seeded with SMA of first N values.
 Requires at least slow + signal bars.
 """
@@ -21,8 +21,8 @@ def calc_macd(
     fast: int = 12,
     slow: int = 26,
     signal: int = 9,
-) -> tuple[float, float, float] | None:
-    """Return (macd_line, signal_line, histogram) or None."""
+) -> tuple[float, float, float, list[float]] | None:
+    """Return (macd_line, signal_line, histogram_last, histogram_series) or None."""
     if len(closes) < slow + signal:
         return None
 
@@ -45,4 +45,4 @@ def calc_macd(
     trim2     = len(macd_line) - len(sig_line)
     histogram = [m - s for m, s in zip(macd_line[trim2:], sig_line)]
 
-    return macd_line[-1], sig_line[-1], histogram[-1]
+    return macd_line[-1], sig_line[-1], histogram[-1], histogram

@@ -1,14 +1,18 @@
 """
 Market Regime Classification
-SPY를 시장 프록시로 사용하여 현재 시장 국면을 분류.
+SPY·QQQ·IWM 3개 프록시를 가중 투표하여 현재 시장 국면을 분류.
 
 기존 AND 조건 방식 대신 신호별 점수를 계산한 뒤 앙상블로 국면을 결정한다.
 각 신호(MA 추세, RSI 모멘텀, BB 변동성)는 [-100, +100] 또는 [0, 100] 점수로
 정규화되며, 신호 간 일치도로 신뢰도(confidence)를 산출한다.
 신뢰도가 낮으면 불확실 국면(ranging)으로 보수 처리한다.
+
+프록시 가중치: SPY 0.5(시장 전체) · QQQ 0.3(나스닥/기술) · IWM 0.2(소형주/경기선행)
+단일 SPY 의존 시 섹터 로테이션(에너지 슈퍼사이클, AI 랠리 초기 등) 포착 불가 문제를 완화.
 """
 
 import logging
+import os
 import time
 import httpx
 from datetime import datetime, timezone, timedelta
@@ -87,16 +91,32 @@ REGIME_SIZE = {
     "ranging":  0.75,
 }
 
-# 앙상블 분류 임계값
-_TREND_STRONG   = 40.0   # |trend_score| > 40 → bearish / trending 인정
-_VOL_HIGH       = 75.0   # volatility_score > 75 → volatile 우선 (≈ BB폭 8%)
-# 신뢰도 판정: 강한 신호 기준 (충돌 심각도 계산에 사용)
-_CONF_HIGH_MIN  = 60.0   # 이 이상 강도의 신호는 "강한 신호"로 분류
+# 시장 프록시 가중치: SPY(전체) 0.5 · QQQ(나스닥/기술) 0.3 · IWM(소형주/경기선행) 0.2
+# 단일 SPY 대비 섹터 로테이션 포착률 개선. 가중치 합 = 1.0
+PROXIES: dict[str, float] = {"SPY": 0.5, "QQQ": 0.3, "IWM": 0.2}
+
+
+def _env_threshold(name: str, default: str) -> float:
+    """환경변수에서 임계값을 읽고 유효 범위(1–99)를 검증한다."""
+    val = float(os.environ.get(name, default))
+    if val < 1.0 or val > 99.0:
+        raise ValueError(f"{name}={val} 유효 범위 초과 (1–99)")
+    return val
+
+
+# 앙상블 분류 임계값 — 원시 지표값에서 역산, 환경변수(REGIME_*)로 재정의 가능
+# REGIME_TREND_STRONG : ADX=25(전통적 추세 임계값) → adx_score=(25-15)/25*100 = 40
+_TREND_STRONG  = _env_threshold("REGIME_TREND_STRONG",  "40")
+# REGIME_VOL_HIGH     : BB폭=8%(VIX≈25 구간)      → vol_score=(8-2)/8*100    = 75
+_VOL_HIGH      = _env_threshold("REGIME_VOL_HIGH",      "75")
+# REGIME_CONF_HIGH_MIN: ADX=30(강한 추세 신호)     → adx_score=(30-15)/25*100 = 60
+_CONF_HIGH_MIN = _env_threshold("REGIME_CONF_HIGH_MIN", "60")
 
 
 async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dict:
     """
     현재 시장 국면 분류.
+    PROXIES(SPY·QQQ·IWM)를 단일 API 호출로 조회하고 가중 투표로 최종 국면을 결정한다.
     client를 전달하면 기존 연결 재사용, None이면 새 클라이언트 생성.
     결과는 5분간 캐시됨. Alpaca API 연속 실패 시 서킷 브레이커가 작동하여 캐시 또는 기본값을 반환.
     """
@@ -118,10 +138,16 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
         client = httpx.AsyncClient(timeout=30)
 
     try:
-        start = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%Y-%m-%d")
+        start    = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%Y-%m-%d")
         bars_res = await client.get(
             f"{DATA}/v2/stocks/bars",
-            params={"symbols": "SPY", "timeframe": "1Day", "limit": 250, "sort": "asc", "start": start},
+            params={
+                "symbols":   ",".join(PROXIES),
+                "timeframe": "1Day",
+                "limit":     250,
+                "sort":      "asc",
+                "start":     start,
+            },
             headers=alpaca_headers(),
         )
         if bars_res.status_code != 200:
@@ -129,88 +155,48 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
             _cb.failure()
             return _cache.get("result") or _default("API 오류")
 
-        bars = bars_res.json().get("bars", {}).get("SPY", [])
-        if len(bars) < 30:
-            # 데이터 부족은 일시적 상태(장 전/후)이므로 서킷 브레이커에는 포함하지 않음
-            logger.warning("Alpaca bars insufficient data: got %d bars (need 30)", len(bars))
-            return _cache.get("result") or _default("데이터 부족")
+        all_bars = bars_res.json().get("bars", {})
 
-        for i, b in enumerate(bars):
-            for field in ("c", "h", "l"):
-                if field not in b:
-                    logger.warning("Bar[%d] missing field '%s'", i, field)
-                    return _cache.get("result") or _default("바 데이터 필드 누락")
-                try:
-                    val = float(b[field])
-                except (ValueError, TypeError):
-                    logger.warning("Bar[%d] field '%s' not numeric: %r", i, field, b[field])
-                    return _cache.get("result") or _default("바 데이터 타입 오류")
-                if val <= 0:
-                    logger.warning("Bar[%d] field '%s' non-positive: %f", i, field, val)
-                    return _cache.get("result") or _default("바 데이터 값 오류")
-            if float(b["l"]) > float(b["c"]) or float(b["c"]) > float(b["h"]):
-                logger.warning("Bar[%d] OHLC logic error: H=%.4f C=%.4f L=%.4f", i, b["h"], b["c"], b["l"])
-                return _cache.get("result") or _default("바 데이터 논리 오류")
+        # 3. 프록시별 유효성 검증 & 국면 분류
+        proxy_results: dict[str, dict] = {}
+        for symbol in PROXIES:
+            bars = all_bars.get(symbol, [])
+            err  = _validate_bars(symbol, bars)
+            if err:
+                logger.warning("프록시 데이터 오류 (스킵): %s", err)
+                continue
+            proxy_results[symbol] = _classify_proxy(symbol, bars)
 
-        closes   = [b["c"] for b in bars]
-        highs    = [b["h"] for b in bars]
-        lows     = [b["l"] for b in bars]
-        latest   = closes[-1]
-        ma5      = calc_ma(closes, 5)
-        ma20     = calc_ma(closes, 20)
-        rsi      = calc_rsi(closes, 14)
-        bb       = calc_bollinger(closes, 20, 2.0)
-        bb_width = round((bb[0] - bb[2]) / bb[1] * 100, 1) if bb else 0.0
-        adx_res  = calc_adx(highs, lows, closes, 14)
-        adx_val, plus_di, minus_di = adx_res if adx_res else (None, None, None)
-        macd_res = calc_macd(closes, 12, 26, 9)
-        macd_line, macd_signal, macd_hist = macd_res if macd_res else (None, None, None)
+        if not proxy_results:
+            _cb.failure()
+            return _cache.get("result") or _default("모든 프록시 데이터 오류")
 
-        scores     = _calc_scores(latest, ma5, ma20, rsi, bb_width, adx_val, plus_di, minus_di, macd_hist)
-        confidence = _calc_confidence(scores)
-        regime     = _classify(scores, confidence)
+        # 4. 가중 투표 → 최종 국면
+        votes: dict[str, float] = {}
+        for symbol, res in proxy_results.items():
+            r        = res["regime"]
+            votes[r] = votes.get(r, 0.0) + PROXIES[symbol]
+        final_regime = max(votes, key=votes.get)
 
+        # 5. 상세 정보: SPY 기준 (없으면 첫 번째 가용 프록시)
+        primary = proxy_results.get("SPY") or next(iter(proxy_results.values()))
         details = {
-            "symbol":        "SPY",
-            "price":         round(latest, 2),
-            "ma5":           round(ma5, 2)          if ma5        else None,
-            "ma20":          round(ma20, 2)          if ma20       else None,
-            "rsi14":         round(rsi, 1)           if rsi        else None,
-            "bb_upper":      round(bb[0], 2)         if bb         else None,
-            "bb_middle":     round(bb[1], 2)         if bb         else None,
-            "bb_lower":      round(bb[2], 2)         if bb         else None,
-            "bb_width_pct":  bb_width,
-            "adx14":         round(adx_val, 1)       if adx_val    is not None else None,
-            "plus_di":       round(plus_di, 1)       if plus_di    is not None else None,
-            "minus_di":      round(minus_di, 1)      if minus_di   is not None else None,
-            "macd_line":     round(macd_line, 3)     if macd_line  is not None else None,
-            "macd_signal":   round(macd_signal, 3)   if macd_signal is not None else None,
-            "macd_hist":     round(macd_hist, 3)     if macd_hist  is not None else None,
-            "confidence":       _confidence_label(confidence),
-            "confidence_score": round(confidence, 3),
-            "signal_scores": {
-                "ma_trend":   round(scores["ma"], 1),
-                "momentum":   round(scores["rsi"], 1),
-                "volatility": round(scores["vol"], 1),
-                "adx":        round(scores["adx"], 1),
-                "macd":       round(scores["macd"], 1),
-            },
-            "signals":       _signals(latest, ma5, ma20, rsi, bb_width, adx_val, plus_di, minus_di, macd_hist),
+            **primary,
+            "proxy_regimes": {s: r["regime"] for s, r in proxy_results.items()},
+            "proxy_votes":   {k: round(v, 2) for k, v in votes.items()},
         }
 
         result = {
-            "regime":      regime,
-            "label":       REGIME_LABELS[regime],
-            "size_factor": REGIME_SIZE[regime],
+            "regime":      final_regime,
+            "label":       REGIME_LABELS[final_regime],
+            "size_factor": REGIME_SIZE[final_regime],
             "details":     details,
             "updated_at":  datetime.now(timezone.utc).isoformat(),
         }
 
-        # 3. 성공 시 캐시 갱신 + 서킷 브레이커 리셋
         _cb.success()
         _cache["result"]     = result
         _cache["expires_at"] = time.monotonic() + _CACHE_TTL
-
         return result
 
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -223,12 +209,87 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
 
 
 # ---------------------------------------------------------------------------
+# 프록시 분류 헬퍼
+# ---------------------------------------------------------------------------
+
+def _validate_bars(symbol: str, bars: list[dict]) -> str | None:
+    """봉 데이터 유효성 검증. 오류 메시지 반환, 정상이면 None."""
+    if len(bars) < 30:
+        return f"{symbol} 데이터 부족 ({len(bars)}개, 최소 30개 필요)"
+    for i, b in enumerate(bars):
+        for field in ("c", "h", "l"):
+            if field not in b:
+                return f"{symbol} bar[{i}] 필드 누락: {field!r}"
+            try:
+                val = float(b[field])
+            except (ValueError, TypeError):
+                return f"{symbol} bar[{i}] 타입 오류: {field}={b[field]!r}"
+            if val <= 0:
+                return f"{symbol} bar[{i}] 비양수: {field}={val}"
+        if float(b["l"]) > float(b["c"]) or float(b["c"]) > float(b["h"]):
+            return f"{symbol} bar[{i}] OHLC 논리 오류: H={b['h']} C={b['c']} L={b['l']}"
+    return None
+
+
+def _classify_proxy(symbol: str, bars: list[dict]) -> dict:
+    """단일 프록시 봉 데이터로 국면과 상세 신호를 분류한다."""
+    closes   = [b["c"] for b in bars]
+    highs    = [b["h"] for b in bars]
+    lows     = [b["l"] for b in bars]
+    latest   = closes[-1]
+    ma5      = calc_ma(closes, 5)
+    ma20     = calc_ma(closes, 20)
+    rsi      = calc_rsi(closes, 14)
+    bb       = calc_bollinger(closes, 20, 2.0)
+    bb_width = round((bb[0] - bb[2]) / bb[1] * 100, 1) if bb else 0.0
+    adx_res  = calc_adx(highs, lows, closes, 14)
+    adx_val, plus_di, minus_di = adx_res if adx_res else (None, None, None)
+    macd_res = calc_macd(closes, 12, 26, 9)
+    macd_line, macd_signal, macd_hist, macd_hist_series = (
+        macd_res if macd_res else (None, None, None, [])
+    )
+
+    scores     = _calc_scores(ma5, ma20, rsi, bb_width, adx_val, plus_di, minus_di, macd_hist, macd_hist_series)
+    confidence = _calc_confidence(scores)
+    regime     = _classify(scores, confidence)
+
+    return {
+        "regime":           regime,
+        "symbol":           symbol,
+        "price":            round(latest, 2),
+        "ma5":              round(ma5, 2)           if ma5          else None,
+        "ma20":             round(ma20, 2)           if ma20         else None,
+        "rsi14":            round(rsi, 1)            if rsi          else None,
+        "bb_upper":         round(bb[0], 2)          if bb           else None,
+        "bb_middle":        round(bb[1], 2)          if bb           else None,
+        "bb_lower":         round(bb[2], 2)          if bb           else None,
+        "bb_width_pct":     bb_width,
+        "adx14":            round(adx_val, 1)        if adx_val      is not None else None,
+        "plus_di":          round(plus_di, 1)        if plus_di      is not None else None,
+        "minus_di":         round(minus_di, 1)       if minus_di     is not None else None,
+        "macd_line":        round(macd_line, 3)      if macd_line    is not None else None,
+        "macd_signal":      round(macd_signal, 3)    if macd_signal  is not None else None,
+        "macd_hist":        round(macd_hist, 3)      if macd_hist    is not None else None,
+        "confidence":       _confidence_label(confidence),
+        "confidence_score": round(confidence, 3),
+        "signal_scores": {
+            "ma_trend":   round(scores["ma"], 1),
+            "momentum":   round(scores["rsi"], 1),
+            "volatility": round(scores["vol"], 1),
+            "adx":        round(scores["adx"], 1),
+            "macd":       round(scores["macd"], 1),
+        },
+        "signals": _signals(latest, ma5, ma20, rsi, bb_width, adx_val, plus_di, minus_di, macd_hist),
+    }
+
+
+# ---------------------------------------------------------------------------
 # 신호 점수 계산
 # ---------------------------------------------------------------------------
 
 def _calc_scores(
-    price: float, ma5, ma20, rsi, bb_width: float,
-    adx=None, plus_di=None, minus_di=None, macd_hist=None,
+    ma5, ma20, rsi, bb_width: float,
+    adx=None, plus_di=None, minus_di=None, macd_hist=None, macd_hist_series=None,
 ) -> dict[str, float]:
     """각 신호를 정규화된 점수로 변환한다."""
     return {
@@ -236,7 +297,7 @@ def _calc_scores(
         "rsi":  _score_rsi(rsi),
         "vol":  _score_vol(bb_width),
         "adx":  _score_adx(adx, plus_di, minus_di),
-        "macd": _score_macd(macd_hist, price),
+        "macd": _score_macd(macd_hist, macd_hist_series),
     }
 
 
@@ -286,15 +347,21 @@ def _score_adx(adx, plus_di, minus_di) -> float:
     return direction * strength
 
 
-def _score_macd(macd_hist, price: float) -> float:
+def _score_macd(macd_hist, hist_series: list[float] | None) -> float:
     """
-    MACD 히스토그램 기반 모멘텀 강도.  [-100, +100]
-    히스토그램을 현재가 대비 비율로 정규화: ±0.3% of price → ±100.
+    MACD 히스토그램 Z-점수 기반 모멘텀 강도.  [-100, +100]
+    직전 50개 표준편차로 정규화: z = hist / std(recent[-50:]) * 50
+    가격 규모 의존성을 제거하여 종목 간 일관성 확보.
     """
-    if macd_hist is None or price == 0:
+    if macd_hist is None or not hist_series or len(hist_series) < 2:
         return 0.0
-    ratio_pct = macd_hist / price * 100
-    return max(-100.0, min(100.0, ratio_pct / 0.3 * 100.0))
+    recent  = hist_series[-50:]
+    n       = len(recent)
+    mean    = sum(recent) / n
+    std     = (sum((x - mean) ** 2 for x in recent) / (n - 1)) ** 0.5
+    if std == 0:
+        return 0.0
+    return max(-100.0, min(100.0, macd_hist / std * 50.0))
 
 
 # ---------------------------------------------------------------------------

@@ -17,19 +17,27 @@ logger = logging.getLogger(__name__)
 
 DATA = "https://data.alpaca.markets"
 
-# A: 시장 국면별 엔진 수준 강제 차단 (type, side) 조합
+# A: 시장 국면별 엔진 수준 강제 차단
+# 2-tuple (type, side)         — direction 무관 차단
+# 3-tuple (type, side, direction) — 해당 direction일 때만 차단
+#
 # bearish:  추세 추종 매수 차단. 손절/익절/trailing은 포지션 보호 목적이므로 유지.
 # volatile: MA크로스는 고변동성 구간에서 휩소 오신호가 많아 양방향 차단.
 #           bollinger_band 등 변동성 활용 전략과 손절 계열은 유지.
-# trending: 추세 반전 베팅인 상단밴드 매도만 차단.
-#           하단밴드 매수(풀백 진입)는 추세장에서 유효하므로 허용.
+# trending: 추세 반전 베팅인 상단밴드 매도(above_upper)만 차단.
+#           하단밴드 청산(below_lower sell)은 손절 보호 목적이므로 허용.
 # ranging:  추세 추종(MA크로스) 차단. trailing_stop은 포지션 보호 목적이므로 유지.
-REGIME_HARD_BLOCK: dict[str, set[tuple[str, str]]] = {
+REGIME_HARD_BLOCK: dict[str, set[tuple]] = {
     "bearish":  {("ma_cross", "buy"), ("price_target", "buy"), ("rsi_threshold", "buy")},
     "volatile": {("ma_cross", "buy"), ("ma_cross", "sell")},
-    "trending": {("bollinger_band", "sell")},
+    "trending": {("bollinger_band", "sell", "above_upper")},
     "ranging":  {("ma_cross", "buy"), ("ma_cross", "sell")},
 }
+
+
+def _is_hard_blocked(blocked: set, stype: str, side: str, direction: str) -> bool:
+    """2-tuple(direction 무관) 또는 3-tuple(특정 direction) 차단 규칙을 모두 처리한다."""
+    return (stype, side) in blocked or (stype, side, direction) in blocked
 
 
 async def run_strategy_engine():
@@ -76,19 +84,26 @@ async def run_strategy_engine():
 
         price_res = fetch_results[0]
         prices: dict[str, float] = {}
-        if not isinstance(price_res, Exception) and price_res.status_code == 200:
-            prices = {sym: t["p"] for sym, t in price_res.json().get("trades", {}).items() if t.get("p")}
-        elif isinstance(price_res, Exception):
-            print(f"[Strategy Engine] 현재가 조회 실패: {price_res}")
+        if isinstance(price_res, Exception):
+            logger.error("현재가 조회 예외 — 전략 엔진 중단: %s", price_res)
+            return
+        if price_res.status_code != 200:
+            logger.error("현재가 조회 HTTP %s — 전략 엔진 중단: %s",
+                         price_res.status_code, price_res.text[:200])
+            return
+        prices = {sym: t["p"] for sym, t in price_res.json().get("trades", {}).items() if t.get("p")}
 
         bars_closes: dict[str, list[float]] = {}
         if len(fetch_results) > 1:
             bars_res = fetch_results[1]
-            if not isinstance(bars_res, Exception) and bars_res.status_code == 200:
+            if isinstance(bars_res, Exception):
+                logger.warning("바 데이터 조회 예외 — RSI/MA/BB 전략 스킵 예정: %s", bars_res)
+            elif bars_res.status_code != 200:
+                logger.warning("바 데이터 조회 HTTP %s — RSI/MA/BB 전략 스킵 예정: %s",
+                               bars_res.status_code, bars_res.text[:200])
+            else:
                 for sym, bars in bars_res.json().get("bars", {}).items():
                     bars_closes[sym] = [b["c"] for b in bars]
-            elif isinstance(bars_res, Exception):
-                print(f"[Strategy Engine] 바 데이터 조회 실패: {bars_res}")
 
         for s in strategies:
             sid   = s["id"]
@@ -100,13 +115,17 @@ async def run_strategy_engine():
             price = prices.get(sym)
 
             if not price:
+                logger.warning("전략[%s] %s 현재가 없음 — trades API 응답에 심볼 누락", sid, sym)
+                await append_log(sid, sym, act["side"], 0,
+                                 "현재가 조회 불가", "skipped",
+                                 error="trades API 응답에 심볼 누락", account_mode=mode)
                 continue
 
             current_regime = regime_info.get("regime", "")
 
             # A: 엔진 수준 강제 차단
             blocked = REGIME_HARD_BLOCK.get(current_regime, set())
-            if (stype, act["side"]) in blocked:
+            if _is_hard_blocked(blocked, stype, act["side"], cond.get("direction", "")):
                 await append_log(sid, sym, act["side"], 0,
                                  f"시장 국면 차단 ({regime_info.get('label', current_regime)})",
                                  "skipped", account_mode=mode)
