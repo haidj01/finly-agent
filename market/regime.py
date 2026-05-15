@@ -329,21 +329,24 @@ def _classify(scores: dict[str, float], confidence: str) -> str:
     """
     점수 기반 앙상블 국면 결정.
 
-    변동성은 BB 폭 자체가 명확한 지표이므로 신뢰도와 무관하게 먼저 판정한다.
+    변동성이 높더라도 추세 신호가 강한 하락세면 bearish로 분류한다.
     나머지 추세/하락 판단은 신호 일치도(confidence)가 낮으면 보수적으로 ranging 처리.
     """
-    # 1. 변동성: 신뢰도 무관, BB 폭이 넓으면 즉시 volatile
-    if scores["vol"] > _VOL_HIGH:
-        return "volatile"
-
-    # 2. 추세/하락 신호가 불명확하면 ranging
-    if confidence == "low":
-        return "ranging"
+    vol_high = scores["vol"] > _VOL_HIGH
 
     # MA 25% + RSI 20% + ADX 35% + MACD 20% 가중합 → 추세 강도
     # ADX 가중치가 가장 높은 이유: 추세 강도·방향을 직접 측정하는 유일한 지표
     trend_score = (scores["ma"]   * 0.25 + scores["rsi"]  * 0.20
                  + scores["adx"]  * 0.35 + scores["macd"] * 0.20)
+
+    if vol_high:
+        # 고변동성 구간이라도 추세 신호가 강한 하락세면 bearish 우선
+        if trend_score < -_TREND_STRONG:
+            return "bearish"
+        return "volatile"
+
+    if confidence == "low":
+        return "ranging"
 
     if trend_score < -_TREND_STRONG:
         return "bearish"
