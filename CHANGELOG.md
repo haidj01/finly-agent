@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.2](https://github.com/haidj01/finly-agent/compare/v0.11.1...v0.11.2) (2026-05-15)
+
+
+### Bug Fixes
+
+* add start date to SPY bars request; drop feed=iex ([3a532fc](https://github.com/haidj01/finly-agent/commit/3a532fc1dc9621f90d6192ca5b6fb4e49bb5a2ea))
+
 ## [0.11.1](https://github.com/haidj01/finly-agent/compare/v0.11.0...v0.11.1) (2026-05-14)
 
 
