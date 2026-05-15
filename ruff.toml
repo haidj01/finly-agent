@@ -1,2 +1,2 @@
-[per-file-ignores]
+[lint.per-file-ignores]
 "main.py" = ["E402"]
