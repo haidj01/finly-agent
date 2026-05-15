@@ -90,9 +90,8 @@ REGIME_SIZE = {
 # 앙상블 분류 임계값
 _TREND_STRONG   = 40.0   # |trend_score| > 40 → bearish / trending 인정
 _VOL_HIGH       = 75.0   # volatility_score > 75 → volatile 우선 (≈ BB폭 8%)
-# 신뢰도 판정
-_CONF_HIGH_MIN  = 60.0   # 각 신호 강도가 이 이상이고 방향 일치 → high
-_CONF_LOW_MAX   = 30.0   # 신호 강도가 이 이하거나 방향 충돌 → low
+# 신뢰도 판정: 강한 신호 기준 (충돌 심각도 계산에 사용)
+_CONF_HIGH_MIN  = 60.0   # 이 이상 강도의 신호는 "강한 신호"로 분류
 
 
 async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dict:
@@ -187,7 +186,8 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
             "macd_line":     round(macd_line, 3)     if macd_line  is not None else None,
             "macd_signal":   round(macd_signal, 3)   if macd_signal is not None else None,
             "macd_hist":     round(macd_hist, 3)     if macd_hist  is not None else None,
-            "confidence":    confidence,
+            "confidence":       _confidence_label(confidence),
+            "confidence_score": round(confidence, 3),
             "signal_scores": {
                 "ma_trend":   round(scores["ma"], 1),
                 "momentum":   round(scores["rsi"], 1),
@@ -301,29 +301,32 @@ def _score_macd(macd_hist, price: float) -> float:
 # 신뢰도 산출
 # ---------------------------------------------------------------------------
 
-def _calc_confidence(scores: dict[str, float]) -> str:
+def _calc_confidence(scores: dict[str, float]) -> float:
     """
-    4개 방향성 신호(MA/RSI/ADX/MACD)의 방향 일치도와 강도로 신뢰도를 결정한다.
-    - high  : 방향 일치 3개 이상 + 강한 신호 3개 이상 (같은 방향)
-    - low   : 신호 대부분 약함 / 방향 2:2 충돌 / 강한 신호들이 서로 반대
-    - medium: 그 외
+    4개 방향성 신호(MA/RSI/ADX/MACD)의 가중 합의도와 충돌 심각도로
+    신뢰도 점수(0.0–1.0)를 반환한다.
+    - agreement_ratio : 가중 합의도 (0.5 = 완전 충돌, 1.0 = 완전 합의)
+    - conflict_penalty: 양방향 강한 신호 충돌 심각도 (충돌 쌍당 -0.15)
     """
     directional = [scores["ma"], scores["rsi"], scores["adx"], scores["macd"]]
 
-    # 방향 일치도: 양수/음수 방향으로 명시적 분류 (0은 중립, 어느 쪽에도 미포함)
-    pos_count  = sum(1 for s in directional if s >  0)
-    neg_count  = sum(1 for s in directional if s <  0)
-    agreement  = max(pos_count, neg_count)  # 4=완전합의, 2=2대2충돌
+    pos_w   = sum(max(s, 0.0) for s in directional)
+    neg_w   = sum(max(-s, 0.0) for s in directional)
+    total_w = pos_w + neg_w
+    agreement_ratio = max(pos_w, neg_w) / total_w if total_w else 0.5
 
     strong_pos = sum(1 for s in directional if s >=  _CONF_HIGH_MIN)
     strong_neg = sum(1 for s in directional if s <= -_CONF_HIGH_MIN)
-    weak_count = sum(1 for s in directional if abs(s) < _CONF_LOW_MAX)
+    conflict_penalty = min(strong_pos, strong_neg) * 0.15
 
-    # 방향 합의 3개 이상이고 강한 신호도 3개 이상 같은 방향일 때만 high
-    if agreement >= 3 and (strong_pos >= 3 or strong_neg >= 3):
+    return max(0.0, min(1.0, agreement_ratio - conflict_penalty))
+
+
+def _confidence_label(score: float) -> str:
+    """신뢰도 점수를 표시용 레이블로 변환한다."""
+    if score >= 0.75:
         return "high"
-    # 신호 약함, 2대2 방향 충돌, 또는 강한 신호 간 반대 방향이면 low
-    if weak_count >= 3 or agreement <= 2 or (strong_pos >= 1 and strong_neg >= 1):
+    if score <= 0.45:
         return "low"
     return "medium"
 
@@ -332,7 +335,7 @@ def _calc_confidence(scores: dict[str, float]) -> str:
 # 앙상블 분류
 # ---------------------------------------------------------------------------
 
-def _classify(scores: dict[str, float], confidence: str) -> str:
+def _classify(scores: dict[str, float], confidence: float) -> str:
     """
     점수 기반 앙상블 국면 결정.
 
@@ -352,7 +355,7 @@ def _classify(scores: dict[str, float], confidence: str) -> str:
             return "bearish"
         return "volatile"
 
-    if confidence == "low":
+    if confidence <= 0.45:
         return "ranging"
 
     if trend_score < -_TREND_STRONG:

@@ -57,7 +57,22 @@ _FALLBACK: dict[str, list[dict]] = {
             "allowed_regimes": ["trending"],
         },
     ],
-    "ranging": [],  # 횡보장은 불명확 — 추천 없음
+    "ranging": [
+        {
+            "type": "rsi_threshold", "symbol": "SPY", "name": "횡보장 RSI 과매도 매수",
+            "condition": {"period": 14, "threshold": 30, "direction": "below"},
+            "action": {"side": "buy", "qty_type": "shares", "qty": 1},
+            "reason": "횡보 구간에서 RSI 30 이하는 단기 반등 기회",
+            "allowed_regimes": ["ranging"],
+        },
+        {
+            "type": "stop_loss", "symbol": "SPY", "name": "횡보장 손절",
+            "condition": {"drop_pct": 5.0},
+            "action": {"side": "sell", "qty_type": "all"},
+            "reason": "횡보 국면 이탈 시 하락 방어",
+            "allowed_regimes": ["ranging"],
+        },
+    ],
 }
 
 
