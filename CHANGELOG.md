@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.3](https://github.com/haidj01/finly-agent/compare/v0.11.2...v0.11.3) (2026-05-15)
+
+
+### Bug Fixes
+
+* security hardening for strategy/regime pipeline ([#31](https://github.com/haidj01/finly-agent/issues/31)) ([f9abd49](https://github.com/haidj01/finly-agent/commit/f9abd496e7fc3d35e798d98c7d7f86afa3f13f9d))
+
 ## [0.11.2](https://github.com/haidj01/finly-agent/compare/v0.11.1...v0.11.2) (2026-05-15)
 
 
