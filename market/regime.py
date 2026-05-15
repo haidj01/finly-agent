@@ -6,7 +6,7 @@ SPY를 시장 프록시로 사용하여 현재 시장 국면을 분류.
 
 import logging
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
@@ -47,9 +47,10 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
         client = httpx.AsyncClient(timeout=30)
 
     try:
+        start = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
         bars_res = await client.get(
             f"{DATA}/v2/stocks/bars",
-            params={"symbols": "SPY", "timeframe": "1Day", "limit": 50, "sort": "asc", "feed": "iex"},
+            params={"symbols": "SPY", "timeframe": "1Day", "limit": 50, "sort": "asc", "start": start},
             headers=alpaca_headers(),
         )
         if bars_res.status_code != 200:
