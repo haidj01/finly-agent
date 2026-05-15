@@ -3,6 +3,8 @@ Strategy Execution Engine
 5분마다 활성화된 전략의 조건을 체크하고 조건 충족 시 주문 실행.
 """
 
+import asyncio
+import logging
 import httpx
 from strategies.store import list_strategies, append_log, toggle_strategy, update_peak_price, update_ma_cross_state
 from strategies.rsi import calc_rsi
@@ -11,18 +13,22 @@ from strategies.bb import calc_bollinger
 from market.regime import classify_market_regime
 from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 
+logger = logging.getLogger(__name__)
+
 DATA = "https://data.alpaca.markets"
 
 # A: 시장 국면별 엔진 수준 강제 차단 (type, side) 조합
-# bearish: 추세 추종 매수 전략 차단 (손절/익절/trailing은 유지)
-# volatile: MA크로스 신뢰도 낮음
-# trending: 박스권 전략(볼린저) 부적합
-# ranging: 추세 추종 전략 부적합
+# bearish:  추세 추종 매수 차단. 손절/익절/trailing은 포지션 보호 목적이므로 유지.
+# volatile: MA크로스는 고변동성 구간에서 휩소 오신호가 많아 양방향 차단.
+#           bollinger_band 등 변동성 활용 전략과 손절 계열은 유지.
+# trending: 추세 반전 베팅인 상단밴드 매도만 차단.
+#           하단밴드 매수(풀백 진입)는 추세장에서 유효하므로 허용.
+# ranging:  추세 추종(MA크로스) 차단. trailing_stop은 포지션 보호 목적이므로 유지.
 REGIME_HARD_BLOCK: dict[str, set[tuple[str, str]]] = {
     "bearish":  {("ma_cross", "buy"), ("price_target", "buy"), ("rsi_threshold", "buy")},
     "volatile": {("ma_cross", "buy"), ("ma_cross", "sell")},
-    "trending": {("bollinger_band", "buy"), ("bollinger_band", "sell")},
-    "ranging":  {("ma_cross", "buy"), ("ma_cross", "sell"), ("trailing_stop", "sell")},
+    "trending": {("bollinger_band", "sell")},
+    "ranging":  {("ma_cross", "buy"), ("ma_cross", "sell")},
 }
 
 
@@ -48,30 +54,41 @@ async def run_strategy_engine():
         pos_res = await client.get(f"{trading_url()}/v2/positions", headers=alpaca_headers())
         positions = {p["symbol"]: p for p in (pos_res.json() if pos_res.status_code == 200 else [])}
 
-        # 현재가 일괄 조회
+        # 현재가 + 바 데이터 동시 조회 (시간차 최소화)
         symbols = list({s["symbol"] for s in strategies})
-        price_res = await client.get(
-            f"{DATA}/v2/stocks/trades/latest",
-            params={"symbols": ",".join(symbols), "feed": "iex"},
-            headers=alpaca_headers(),
-        )
-        prices = {}
-        if price_res.status_code == 200:
-            prices = {sym: t["p"] for sym, t in price_res.json().get("trades", {}).items() if t.get("p")}
+        _bar_types = {"rsi_threshold", "ma_cross", "bollinger_band"}
+        bar_symbols = list({s["symbol"] for s in strategies if s["type"] in _bar_types})
 
-        # Fetch daily bars for indicator strategies (RSI + MA Cross)
-        # 50 bars: sufficient for RSI(14) Wilder smoothing and MA(20)
-        bar_symbols = list({s["symbol"] for s in strategies if s["type"] in ("rsi_threshold", "ma_cross", "bollinger_band")})
-        bars_closes: dict[str, list[float]] = {}
+        fetch_tasks: list = [
+            client.get(f"{DATA}/v2/stocks/trades/latest",
+                       params={"symbols": ",".join(symbols), "feed": "iex"},
+                       headers=alpaca_headers()),
+        ]
         if bar_symbols:
-            bars_res = await client.get(
-                f"{DATA}/v2/stocks/bars",
-                params={"symbols": ",".join(bar_symbols), "timeframe": "1Day", "limit": 50, "sort": "asc", "feed": "iex"},
-                headers=alpaca_headers(),
+            fetch_tasks.append(
+                client.get(f"{DATA}/v2/stocks/bars",
+                           params={"symbols": ",".join(bar_symbols), "timeframe": "1Day",
+                                   "limit": 50, "sort": "asc", "feed": "iex"},
+                           headers=alpaca_headers())
             )
-            if bars_res.status_code == 200:
+
+        fetch_results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+        price_res = fetch_results[0]
+        prices: dict[str, float] = {}
+        if not isinstance(price_res, Exception) and price_res.status_code == 200:
+            prices = {sym: t["p"] for sym, t in price_res.json().get("trades", {}).items() if t.get("p")}
+        elif isinstance(price_res, Exception):
+            print(f"[Strategy Engine] 현재가 조회 실패: {price_res}")
+
+        bars_closes: dict[str, list[float]] = {}
+        if len(fetch_results) > 1:
+            bars_res = fetch_results[1]
+            if not isinstance(bars_res, Exception) and bars_res.status_code == 200:
                 for sym, bars in bars_res.json().get("bars", {}).items():
                     bars_closes[sym] = [b["c"] for b in bars]
+            elif isinstance(bars_res, Exception):
+                print(f"[Strategy Engine] 바 데이터 조회 실패: {bars_res}")
 
         for s in strategies:
             sid   = s["id"]
@@ -114,7 +131,14 @@ async def run_strategy_engine():
             rsi = None
             if stype == "rsi_threshold":
                 period = cond.get("period", 14)
-                rsi = calc_rsi(bars_closes.get(sym, []), period)
+                closes = bars_closes.get(sym, [])
+                required = period + 1
+                if len(closes) < required:
+                    await append_log(sid, sym, act["side"], 0,
+                                     f"RSI({period}) 계산 불가 — 데이터 {len(closes)}개 (최소 {required}개 필요)",
+                                     "skipped", account_mode=mode)
+                    continue
+                rsi = calc_rsi(closes, period)
                 if rsi is not None:
                     print(f"[Strategy] RSI({period}) {sym}: {rsi:.2f}")
 
@@ -130,15 +154,20 @@ async def run_strategy_engine():
                 if ma_fast is not None and ma_slow is not None:
                     curr_state = "above" if ma_fast > ma_slow else "below"
                     prev_state = s.get("ma_cross_state")
-                    print(f"[Strategy] MA{fast_p}/MA{slow_p} {sym}: fast={ma_fast:.2f} slow={ma_slow:.2f} ({curr_state})")
+                    print(
+                        f"[Strategy] MA{fast_p}/MA{slow_p} {sym}: "
+                        f"fast={ma_fast:.2f} slow={ma_slow:.2f} ({curr_state})"
+                    )
 
                     if prev_state is None:
                         # 최초 실행: 현재 상태 저장만 하고 트리거 안 함
                         await update_ma_cross_state(sid, curr_state)
+                        s["ma_cross_state"] = curr_state
                     elif curr_state != prev_state:
                         # 상태 변화 = 크로스 발생
                         cross_event = "golden" if curr_state == "above" else "dead"
                         await update_ma_cross_state(sid, curr_state)
+                        s["ma_cross_state"] = curr_state
 
             # Bollinger Band 계산
             bb = None
@@ -147,9 +176,15 @@ async def run_strategy_engine():
                 multiplier = cond.get("multiplier", 2.0)
                 bb = calc_bollinger(bars_closes.get(sym, []), period, multiplier)
                 if bb:
-                    print(f"[Strategy] BB({period},{multiplier}) {sym}: upper={bb[0]:.2f} mid={bb[1]:.2f} lower={bb[2]:.2f} price={price:.2f}")
+                    print(
+                        f"[Strategy] BB({period},{multiplier}) {sym}: "
+                        f"upper={bb[0]:.2f} mid={bb[1]:.2f} lower={bb[2]:.2f} price={price:.2f}"
+                    )
 
-            triggered, reason = _evaluate(stype, cond, pos, price, s.get("peak_price"), rsi=rsi, cross_event=cross_event, bb=bb)
+            triggered, reason = _evaluate(
+                stype, cond, pos, price, s.get("peak_price"),
+                rsi=rsi, cross_event=cross_event, bb=bb,
+            )
             if not triggered:
                 continue
 
@@ -175,9 +210,18 @@ async def run_strategy_engine():
             if order_res.status_code == 200:
                 await append_log(sid, sym, act["side"], qty, reason, "executed",
                                  order_id=order_res.json().get("id"), account_mode=mode)
-                # 1회 실행 후 비활성화
-                if stype in ("take_profit", "price_target", "trailing_stop", "rsi_threshold", "ma_cross", "bollinger_band"):
+                # trailing_stop: 전량 매도 완료 시에만 비활성화 (부분 매도는 잔여 포지션 계속 추적)
+                # 나머지 전략: 조건 달성 = 목적 완료이므로 무조건 비활성화
+                should_disable = (
+                    stype in ("take_profit", "price_target", "rsi_threshold", "ma_cross", "bollinger_band")
+                    or (stype == "trailing_stop" and act["qty_type"] == "all")
+                )
+                if should_disable:
                     await toggle_strategy(sid)
+                # trailing_stop 부분 매도: 고점을 초기화해 현재가 기준으로 재추적 시작
+                if stype == "trailing_stop" and act["qty_type"] != "all":
+                    await update_peak_price(sid, None)
+                    s["peak_price"] = None
                 print(f"[Strategy] ✅ {sym} {act['side']} {qty}주 | {reason}")
             else:
                 await append_log(sid, sym, act["side"], qty, reason, "failed",
@@ -185,11 +229,18 @@ async def run_strategy_engine():
                 print(f"[Strategy] ❌ {sym} {act['side']} 실패 | {order_res.text}")
 
 
-def _evaluate(stype: str, cond: dict, pos: dict | None, price: float, peak_price: float | None = None, rsi: float | None = None, cross_event: str | None = None, bb: tuple | None = None) -> tuple[bool, str]:
+def _evaluate(
+    stype: str, cond: dict, pos: dict | None, price: float,
+    peak_price: float | None = None, rsi: float | None = None,
+    cross_event: str | None = None, bb: tuple | None = None,
+) -> tuple[bool, str]:
     if stype == "stop_loss":
         if not pos:
             return False, ""
-        drop_pct  = float(pos.get("unrealized_plpc", 0)) * 100
+        if pos.get("unrealized_plpc") is None:
+            logger.warning("stop_loss: %s 포지션에 unrealized_plpc 필드 없음 — 스킵", pos.get("symbol", "?"))
+            return False, ""
+        drop_pct  = float(pos["unrealized_plpc"]) * 100
         threshold = cond.get("drop_pct", 5.0)
         if drop_pct <= -threshold:
             return True, f"손실 {abs(drop_pct):.1f}% (임계값 {threshold}%)"
@@ -197,7 +248,10 @@ def _evaluate(stype: str, cond: dict, pos: dict | None, price: float, peak_price
     elif stype == "take_profit":
         if not pos:
             return False, ""
-        gain_pct  = float(pos.get("unrealized_plpc", 0)) * 100
+        if pos.get("unrealized_plpc") is None:
+            logger.warning("take_profit: %s 포지션에 unrealized_plpc 필드 없음 — 스킵", pos.get("symbol", "?"))
+            return False, ""
+        gain_pct  = float(pos["unrealized_plpc"]) * 100
         threshold = cond.get("gain_pct", 10.0)
         if gain_pct >= threshold:
             return True, f"수익 {gain_pct:.1f}% (목표 {threshold}%)"
@@ -211,7 +265,13 @@ def _evaluate(stype: str, cond: dict, pos: dict | None, price: float, peak_price
             return True, f"현재가 ${price:.2f} ≤ 목표가 ${target:.2f}"
 
     elif stype == "trailing_stop":
-        if not pos or not peak_price:
+        if not pos:
+            return False, ""
+        if peak_price is None or peak_price <= 0:
+            logger.warning("trailing_stop: peak_price 무효 (%r) — 고점 확정 대기 중", peak_price)
+            return False, ""
+        if price <= 0:
+            logger.warning("trailing_stop: 현재가 무효 (%r)", price)
             return False, ""
         trail_pct = cond.get("trail_pct", 7.0)
         drop_pct  = (peak_price - price) / peak_price * 100
@@ -241,7 +301,7 @@ def _evaluate(stype: str, cond: dict, pos: dict | None, price: float, peak_price
     elif stype == "bollinger_band":
         if bb is None:
             return False, ""
-        upper, middle, lower = bb
+        upper, _, lower = bb
         direction  = cond.get("direction", "below_lower")
         period     = cond.get("period", 20)
         multiplier = cond.get("multiplier", 2.0)

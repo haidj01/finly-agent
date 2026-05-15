@@ -1,7 +1,10 @@
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-StrategyType = Literal["stop_loss", "take_profit", "price_target", "trailing_stop", "rsi_threshold", "ma_cross", "bollinger_band"]
+StrategyType = Literal[
+    "stop_loss", "take_profit", "price_target", "trailing_stop",
+    "rsi_threshold", "ma_cross", "bollinger_band",
+]
 QtyType      = Literal["shares", "all"]
 Direction    = Literal["above", "below"]
 AccountMode  = Literal["paper", "live"]

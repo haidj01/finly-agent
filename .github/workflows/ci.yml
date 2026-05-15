@@ -20,10 +20,17 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff
+        run: pip install -r requirements.txt ruff pylint
 
       - name: Lint (ruff)
         run: ruff check .
+
+      - name: Lint (pylint)
+        run: pylint $(git ls-files '*.py') --fail-under=10.0
+        env:
+          CLAUDE_API_KEY: dummy
+          ALPACA_API_KEY: dummy
+          ALPACA_API_SECRET: dummy
 
       - name: Syntax check
         run: |
