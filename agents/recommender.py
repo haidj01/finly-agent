@@ -16,7 +16,9 @@ from alpaca_cfg import trading_url, alpaca_headers
 logger = logging.getLogger(__name__)
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL   = "claude-sonnet-4-20250514"
+CLAUDE_MODEL   = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+if not CLAUDE_MODEL.startswith("claude-"):
+    raise ValueError(f"CLAUDE_MODEL 환경변수 값이 유효하지 않음: {CLAUDE_MODEL!r}")
 
 _MAX_RETRIES = 2          # 최대 재시도 횟수 (첫 시도 포함 총 3회)
 _RETRY_BASE  = 1.0        # exponential backoff 기본 대기(초)
@@ -219,8 +221,19 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 )
 
             if res.status_code != 200:
-                logger.warning("Claude API HTTP %s (attempt %d/%d): %s",
-                               res.status_code, attempt + 1, _MAX_RETRIES + 1, res.text[:200])
+                try:
+                    err_type = res.json().get("error", {}).get("type", "")
+                except Exception:  # pylint: disable=broad-exception-caught
+                    err_type = ""
+                if err_type == "model_not_found":
+                    logger.error(
+                        "Claude 모델을 찾을 수 없음: %r — CLAUDE_MODEL 환경변수 확인 필요", CLAUDE_MODEL
+                    )
+                else:
+                    logger.warning(
+                        "Claude API HTTP %s (attempt %d/%d): %s",
+                        res.status_code, attempt + 1, _MAX_RETRIES + 1, res.text[:200]
+                    )
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
