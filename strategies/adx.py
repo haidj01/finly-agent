@@ -44,12 +44,12 @@ def calc_adx(
 
     tr_list, pdm_list, mdm_list = [], [], []
     for i in range(1, n):
-        h,  l,  pc = highs[i], lows[i], closes[i - 1]
+        h,  lo, pc = highs[i], lows[i], closes[i - 1]
         ph, pl     = highs[i - 1], lows[i - 1]
 
-        tr  = max(h - l, abs(h - pc), abs(l - pc))
+        tr  = max(h - lo, abs(h - pc), abs(lo - pc))
         up  = h - ph
-        dn  = pl - l
+        dn  = pl - lo
         pdm = up if (up > dn and up > 0) else 0.0
         mdm = dn if (dn > up and dn > 0) else 0.0
 
