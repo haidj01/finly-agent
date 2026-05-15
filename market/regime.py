@@ -149,7 +149,7 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
                 if val <= 0:
                     logger.warning("Bar[%d] field '%s' non-positive: %f", i, field, val)
                     return _cache.get("result") or _default("바 데이터 값 오류")
-            if float(b["l"]) > float(b["c"]) or float(b["c"]) > float(b["h"]):
+            if not (float(b["l"]) <= float(b["c"]) <= float(b["h"])):
                 logger.warning("Bar[%d] OHLC logic error: H=%.4f C=%.4f L=%.4f", i, b["h"], b["c"], b["l"])
                 return _cache.get("result") or _default("바 데이터 논리 오류")
 
