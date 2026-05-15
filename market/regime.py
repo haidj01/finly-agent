@@ -303,20 +303,27 @@ def _score_macd(macd_hist, price: float) -> float:
 
 def _calc_confidence(scores: dict[str, float]) -> str:
     """
-    4개 방향성 신호(MA/RSI/ADX/MACD)의 일치도 + 강도로 신뢰도를 결정한다.
-    - high  : 4개 중 3개 이상이 같은 방향으로 강함
-    - low   : 4개 중 3개 이상이 약하거나, 강한 신호들이 서로 충돌
+    4개 방향성 신호(MA/RSI/ADX/MACD)의 방향 일치도와 강도로 신뢰도를 결정한다.
+    - high  : 방향 일치 3개 이상 + 강한 신호 3개 이상 (같은 방향)
+    - low   : 신호 대부분 약함 / 방향 2:2 충돌 / 강한 신호들이 서로 반대
     - medium: 그 외
     """
     directional = [scores["ma"], scores["rsi"], scores["adx"], scores["macd"]]
+
+    # 방향 일치도: 양수/음수 방향으로 명시적 분류 (0은 중립, 어느 쪽에도 미포함)
+    pos_count  = sum(1 for s in directional if s >  0)
+    neg_count  = sum(1 for s in directional if s <  0)
+    agreement  = max(pos_count, neg_count)  # 4=완전합의, 2=2대2충돌
 
     strong_pos = sum(1 for s in directional if s >=  _CONF_HIGH_MIN)
     strong_neg = sum(1 for s in directional if s <= -_CONF_HIGH_MIN)
     weak_count = sum(1 for s in directional if abs(s) < _CONF_LOW_MAX)
 
-    if strong_pos >= 3 or strong_neg >= 3:
+    # 방향 합의 3개 이상이고 강한 신호도 3개 이상 같은 방향일 때만 high
+    if agreement >= 3 and (strong_pos >= 3 or strong_neg >= 3):
         return "high"
-    if weak_count >= 3 or (strong_pos >= 1 and strong_neg >= 1):
+    # 신호 약함, 2대2 방향 충돌, 또는 강한 신호 간 반대 방향이면 low
+    if weak_count >= 3 or agreement <= 2 or (strong_pos >= 1 and strong_neg >= 1):
         return "low"
     return "medium"
 
