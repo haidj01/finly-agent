@@ -3,8 +3,9 @@ import pathlib
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -20,6 +21,24 @@ from api.strategy import router as strategy_router
 from api.market import router as market_router
 
 app = FastAPI(title="Finly Agent", description="자율 매매 에이전트 서비스")
+
+# 토큰 검증 없이 허용할 경로 (헬스체크·버전은 외부 모니터링도 사용)
+_TOKEN_EXEMPT = frozenset({"/health", "/version"})
+
+
+@app.middleware("http")
+async def verify_internal_token(request: Request, call_next):
+    """백엔드→에이전트 내부 API 토큰 검증.
+    FINLY_INTERNAL_TOKEN 환경변수가 설정된 경우에만 강제한다.
+    """
+    if request.url.path not in _TOKEN_EXEMPT:
+        expected = os.getenv("FINLY_INTERNAL_TOKEN")
+        if expected:
+            token = request.headers.get("X-Internal-Token")
+            if not token or token != expected:
+                return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,
