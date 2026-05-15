@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.5](https://github.com/haidj01/finly-agent/compare/v0.11.4...v0.11.5) (2026-05-15)
+
+
+### Bug Fixes
+
+* **regime:** improve confidence scoring with explicit directional agreement ([#35](https://github.com/haidj01/finly-agent/issues/35)) ([7a47836](https://github.com/haidj01/finly-agent/commit/7a47836c1493d6664da62ad3466fcc2e4290fcd3))
+
 ## [0.11.4](https://github.com/haidj01/finly-agent/compare/v0.11.3...v0.11.4) (2026-05-15)
 
 
