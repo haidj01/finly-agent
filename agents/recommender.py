@@ -209,7 +209,7 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "Claude API 오류")
+                return _fallback(regime_info, "Claude API 오류", positions)
 
             raw  = res.json()["content"][0]["text"].strip()
             text = _extract_json(raw)
@@ -222,14 +222,14 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "JSON 파싱 실패")
+                return _fallback(regime_info, "JSON 파싱 실패", positions)
 
             if not isinstance(recommendations, list):
                 logger.warning("Claude 응답이 list가 아님 (attempt %d): %s", attempt + 1, type(recommendations))
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "응답 형식 오류")
+                return _fallback(regime_info, "응답 형식 오류", positions)
 
             validated = _validate_recommendations(recommendations)
             if not validated:
@@ -238,7 +238,7 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "유효한 추천 없음")
+                return _fallback(regime_info, "유효한 추천 없음", positions)
 
             return {
                 "regime":          regime,
@@ -254,16 +254,16 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                 continue
-            return _fallback(regime_info, f"네트워크 오류: {exc}")
+            return _fallback(regime_info, f"네트워크 오류: {exc}", positions)
 
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.exception("Claude API 예상치 못한 오류 (attempt %d/%d)", attempt + 1, _MAX_RETRIES + 1)
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                 continue
-            return _fallback(regime_info, f"내부 오류: {exc}")
+            return _fallback(regime_info, f"내부 오류: {exc}", positions)
 
-    return _fallback(regime_info, "재시도 초과")
+    return _fallback(regime_info, "재시도 초과", positions)
 
 
 # ---------------------------------------------------------------------------
@@ -342,14 +342,45 @@ condition 형식 (타입별):
 - bollinger_band: {{"period": 20, "multiplier": 2.0, "direction": "below_lower|above_upper"}}"""
 
 
-def _fallback(regime_info: dict, reason: str) -> dict:
+def _adapt_fallback(templates: list[dict], positions: list) -> list[dict]:
+    """
+    Fallback 템플릿의 SPY 고정을 실제 보유 포지션 기반으로 교체한다.
+    - sell 전략: 보유 포지션 종목별 생성 (시장가치 기준 상위 5개)
+    - buy  전략: 포지션 무관, SPY 유지 (범용 ETF 기준값)
+    """
+    if not positions:
+        return [dict(t) for t in templates]
+
+    def _market_value(p: dict) -> float:
+        try:
+            return float(p.get("qty", 0)) * float(p.get("current_price", 0))
+        except (ValueError, TypeError):
+            return 0.0
+
+    held_syms = [
+        p["symbol"] for p in sorted(positions, key=_market_value, reverse=True)
+        if p.get("symbol")
+    ][:5]
+
+    result = []
+    for tmpl in templates:
+        if tmpl.get("action", {}).get("side") == "sell" and held_syms:
+            for sym in held_syms:
+                result.append({**tmpl, "symbol": sym, "name": f"{tmpl['name']} ({sym})"})
+        else:
+            result.append(dict(tmpl))
+    return result
+
+
+def _fallback(regime_info: dict, reason: str, positions: list | None = None) -> dict:
     regime = regime_info.get("regime", "ranging")
     logger.warning("Fallback 추천 사용: %s (국면=%s)", reason, regime)
+    templates = _FALLBACK.get(regime, [])
     return {
         "regime":          regime,
         "regime_label":    regime_info.get("label", "횡보장"),
         "size_factor":     regime_info.get("size_factor", 1.0),
         "details":         regime_info.get("details", {}),
-        "recommendations": _FALLBACK.get(regime, []),
+        "recommendations": _adapt_fallback(templates, positions or []),
         "fallback_reason": reason,
     }
