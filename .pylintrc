@@ -1,0 +1,20 @@
+[MASTER]
+# aiosqlite and other runtime deps may not be installed in CI lint environment
+ignored-modules=aiosqlite
+
+[MESSAGES CONTROL]
+disable=
+    C0114,  # missing-module-docstring   — FastAPI service style
+    C0115,  # missing-class-docstring    — FastAPI service style
+    C0116,  # missing-function-docstring — FastAPI service style
+    C0411,  # wrong-import-order         — load_dotenv() must precede app imports
+    C0413,  # wrong-import-position      — load_dotenv() must precede app imports
+    R0911,  # too-many-return-statements — _evaluate() dispatch pattern
+    R0912,  # too-many-branches          — strategy/regime domain logic
+    R0913,  # too-many-arguments         — strategy/regime domain logic
+    R0914,  # too-many-locals            — strategy/regime domain logic
+    R0915,  # too-many-statements        — strategy/regime domain logic
+    R0917,  # too-many-positional-arguments — strategy/regime domain logic
+
+[FORMAT]
+max-line-length=120

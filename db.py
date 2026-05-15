@@ -60,7 +60,7 @@ async def init_db():
             try:
                 await db.execute(migration)
                 await db.commit()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass  # 이미 존재하면 무시
 
 

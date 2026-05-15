@@ -56,7 +56,8 @@ async def run_strategy_engine():
 
         # 현재가 + 바 데이터 동시 조회 (시간차 최소화)
         symbols = list({s["symbol"] for s in strategies})
-        bar_symbols = list({s["symbol"] for s in strategies if s["type"] in ("rsi_threshold", "ma_cross", "bollinger_band")})
+        _bar_types = {"rsi_threshold", "ma_cross", "bollinger_band"}
+        bar_symbols = list({s["symbol"] for s in strategies if s["type"] in _bar_types})
 
         fetch_tasks: list = [
             client.get(f"{DATA}/v2/stocks/trades/latest",
@@ -153,7 +154,10 @@ async def run_strategy_engine():
                 if ma_fast is not None and ma_slow is not None:
                     curr_state = "above" if ma_fast > ma_slow else "below"
                     prev_state = s.get("ma_cross_state")
-                    print(f"[Strategy] MA{fast_p}/MA{slow_p} {sym}: fast={ma_fast:.2f} slow={ma_slow:.2f} ({curr_state})")
+                    print(
+                        f"[Strategy] MA{fast_p}/MA{slow_p} {sym}: "
+                        f"fast={ma_fast:.2f} slow={ma_slow:.2f} ({curr_state})"
+                    )
 
                     if prev_state is None:
                         # 최초 실행: 현재 상태 저장만 하고 트리거 안 함
@@ -172,9 +176,15 @@ async def run_strategy_engine():
                 multiplier = cond.get("multiplier", 2.0)
                 bb = calc_bollinger(bars_closes.get(sym, []), period, multiplier)
                 if bb:
-                    print(f"[Strategy] BB({period},{multiplier}) {sym}: upper={bb[0]:.2f} mid={bb[1]:.2f} lower={bb[2]:.2f} price={price:.2f}")
+                    print(
+                        f"[Strategy] BB({period},{multiplier}) {sym}: "
+                        f"upper={bb[0]:.2f} mid={bb[1]:.2f} lower={bb[2]:.2f} price={price:.2f}"
+                    )
 
-            triggered, reason = _evaluate(stype, cond, pos, price, s.get("peak_price"), rsi=rsi, cross_event=cross_event, bb=bb)
+            triggered, reason = _evaluate(
+                stype, cond, pos, price, s.get("peak_price"),
+                rsi=rsi, cross_event=cross_event, bb=bb,
+            )
             if not triggered:
                 continue
 
@@ -219,7 +229,11 @@ async def run_strategy_engine():
                 print(f"[Strategy] ❌ {sym} {act['side']} 실패 | {order_res.text}")
 
 
-def _evaluate(stype: str, cond: dict, pos: dict | None, price: float, peak_price: float | None = None, rsi: float | None = None, cross_event: str | None = None, bb: tuple | None = None) -> tuple[bool, str]:
+def _evaluate(
+    stype: str, cond: dict, pos: dict | None, price: float,
+    peak_price: float | None = None, rsi: float | None = None,
+    cross_event: str | None = None, bb: tuple | None = None,
+) -> tuple[bool, str]:
     if stype == "stop_loss":
         if not pos:
             return False, ""
@@ -287,7 +301,7 @@ def _evaluate(stype: str, cond: dict, pos: dict | None, price: float, peak_price
     elif stype == "bollinger_band":
         if bb is None:
             return False, ""
-        upper, middle, lower = bb
+        upper, _, lower = bb
         direction  = cond.get("direction", "below_lower")
         period     = cond.get("period", 20)
         multiplier = cond.get("multiplier", 2.0)

@@ -73,9 +73,9 @@ async def get_watchdog_status():
 
 @router.post("/watchdog/config")
 async def update_watchdog(req: WatchdogConfig):
-    if not (0 < req.drop_pct <= 50):
+    if req.drop_pct <= 0 or req.drop_pct > 50:
         raise HTTPException(400, "drop_pct는 0~50 사이여야 합니다.")
-    if not (1 <= req.max_sell_qty <= 1000):
+    if req.max_sell_qty < 1 or req.max_sell_qty > 1000:
         raise HTTPException(400, "max_sell_qty는 1~1000 사이여야 합니다.")
     save_config(req.model_dump())
     return {"message": "워치독 설정 업데이트", "config": req.model_dump()}
@@ -91,17 +91,20 @@ async def trigger_watchdog():
 
 @router.get("/regime-recommendations")
 async def get_regime_recommendations(symbol: str = ""):
-    from agents.recommender import generate_recommendations
+    from agents.recommender import generate_recommendations  # pylint: disable=import-outside-toplevel
     try:
         return await generate_recommendations(symbol.upper() if symbol else None)
-    except Exception as e:
-        raise HTTPException(500, str(e))
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        raise HTTPException(500, str(e)) from e
 
 
 # ── Trade History ──────────────────────────────────────────────
 
 @router.get("/trade-history")
-async def get_trade_history(limit: int = 50, offset: int = 0, status: str = "", symbol: str = "", mode: str = "", source: str = ""):
+async def get_trade_history(
+    limit: int = 50, offset: int = 0, status: str = "",
+    symbol: str = "", mode: str = "", source: str = "",
+):
     conditions = []
     params: list = []
 

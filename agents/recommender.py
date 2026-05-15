@@ -140,7 +140,7 @@ def _validate_recommendations(items: list) -> list:
             continue
 
         sym = re.sub(r"[^A-Z0-9]", "", str(item["symbol"]).upper())
-        if not (1 <= len(sym) <= 10):
+        if len(sym) < 1 or len(sym) > 10:
             logger.warning("추천[%d] 유효하지 않은 symbol: %r", i, item["symbol"])
             continue
         item["symbol"] = sym
@@ -158,7 +158,7 @@ def _validate_recommendations(items: list) -> list:
         if action.get("qty_type") == "shares":
             try:
                 qty = int(action["qty"]) if action.get("qty") is not None else 1
-                if not (1 <= qty <= 100):
+                if qty < 1 or qty > 100:
                     logger.warning("추천[%d] qty 범위 초과: %d", i, qty)
                     continue
                 action["qty"] = qty
@@ -256,7 +256,7 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 continue
             return _fallback(regime_info, f"네트워크 오류: {exc}")
 
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.exception("Claude API 예상치 못한 오류 (attempt %d/%d)", attempt + 1, _MAX_RETRIES + 1)
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_BASE * (2 ** attempt))

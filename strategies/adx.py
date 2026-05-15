@@ -1,7 +1,8 @@
 """
 Average Directional Index (ADX) calculation.
 Returns (adx, plus_di, minus_di) or None if insufficient data.
-Uses Wilder's smoothing (RMA): seed = sum of first N values, then smooth[i] = smooth[i-1] - smooth[i-1]/period + current.
+Uses Wilder's smoothing (RMA): seed = sum of first N values,
+then smooth[i] = smooth[i-1] - smooth[i-1]/period + current.
 Requires at least 2*period + 1 bars.
 """
 
