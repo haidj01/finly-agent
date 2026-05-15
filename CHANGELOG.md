@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.11.6](https://github.com/haidj01/finly-agent/compare/v0.11.5...v0.11.6) (2026-05-15)
+
+
+### Bug Fixes
+
+* **recommender:** adapt fallback strategies to actual held positions ([#37](https://github.com/haidj01/finly-agent/issues/37)) ([fe7c8a8](https://github.com/haidj01/finly-agent/commit/fe7c8a8c3944d409152b253d73a263ceeef2ef7f))
+
 ## [0.11.5](https://github.com/haidj01/finly-agent/compare/v0.11.4...v0.11.5) (2026-05-15)
 
 
