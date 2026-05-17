@@ -56,6 +56,10 @@ async def init_db():
             "ALTER TABLE strategies ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
             "ALTER TABLE strategy_logs ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
             "ALTER TABLE strategies ADD COLUMN allowed_regimes TEXT DEFAULT NULL",
+            # 기존 중복 제거 (account_mode/symbol/type 기준 가장 최근 1건만 유지)
+            """DELETE FROM strategies WHERE rowid NOT IN (
+                SELECT MAX(rowid) FROM strategies GROUP BY account_mode, symbol, type
+            )""",
             "CREATE UNIQUE INDEX IF NOT EXISTS uniq_strategy ON strategies(account_mode, symbol, type)",
         ]:
             try:
