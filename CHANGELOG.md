@@ -1,6 +1,20 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.12.0](https://github.com/haidj01/finly-agent/compare/v0.11.6...v0.12.0) (2026-05-17)
+
+
+### Features
+
+* **strategy:** enforce unique constraint per mode/symbol/type ([#43](https://github.com/haidj01/finly-agent/issues/43)) ([e928cae](https://github.com/haidj01/finly-agent/commit/e928cae9de58b016feac91dacd49bc2b86b73815))
+* 신호 품질 개선 — MACD Z-score, 멀티 프록시, notional 수량, 엔진 강화 ([#42](https://github.com/haidj01/finly-agent/issues/42)) ([fbd9f24](https://github.com/haidj01/finly-agent/commit/fbd9f24494681e28ebd40d7f60347240a44ddf0f))
+
+
+### Bug Fixes
+
+* **recommender:** externalize Claude model via env var with validation ([#41](https://github.com/haidj01/finly-agent/issues/41)) ([f2eab5b](https://github.com/haidj01/finly-agent/commit/f2eab5b051a8bb819dc11f1189cd0f913b342fc5))
+* **regime:** replace categorical confidence with continuous float score ([#39](https://github.com/haidj01/finly-agent/issues/39)) ([416337e](https://github.com/haidj01/finly-agent/commit/416337ea34b5cfebc0dea22f80931be2cd48b8f6))
+
 ## [0.11.6](https://github.com/haidj01/finly-agent/compare/v0.11.5...v0.11.6) (2026-05-15)
 
 
