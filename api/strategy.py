@@ -27,7 +27,7 @@ async def api_create(req: CreateStrategyRequest):
     try:
         strategy = await create_strategy(req, account_mode=account_mode)
     except ValueError as e:
-        raise HTTPException(409, str(e))
+        raise HTTPException(409, str(e)) from e
     return {"message": "전략 등록 완료", "strategy": strategy}
 
 

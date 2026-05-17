@@ -71,10 +71,10 @@ async def create_strategy(req, account_mode: str) -> dict:
                  int(req.enabled), now, account_mode, allowed_regimes_json),
             )
             await db.commit()
-        except aiosqlite.IntegrityError:
+        except aiosqlite.IntegrityError as exc:
             raise ValueError(
                 f"이미 동일한 전략이 존재합니다: {account_mode} / {req.symbol.upper()} / {req.type}"
-            )
+            ) from exc
     return await get_strategy(sid)
 
 
