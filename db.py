@@ -56,6 +56,7 @@ async def init_db():
             "ALTER TABLE strategies ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
             "ALTER TABLE strategy_logs ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
             "ALTER TABLE strategies ADD COLUMN allowed_regimes TEXT DEFAULT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_strategy ON strategies(account_mode, symbol, type)",
         ]:
             try:
                 await db.execute(migration)

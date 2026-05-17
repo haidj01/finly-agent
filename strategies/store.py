@@ -61,15 +61,20 @@ async def create_strategy(req, account_mode: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     allowed_regimes_json = json.dumps(req.allowed_regimes) if req.allowed_regimes else None
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO strategies
-               (id, name, symbol, type, condition, action, enabled, created_at, account_mode, allowed_regimes)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (sid, req.name, req.symbol.upper(), req.type,
-             json.dumps(req.condition), json.dumps(req.action.model_dump()),
-             int(req.enabled), now, account_mode, allowed_regimes_json),
-        )
-        await db.commit()
+        try:
+            await db.execute(
+                """INSERT INTO strategies
+                   (id, name, symbol, type, condition, action, enabled, created_at, account_mode, allowed_regimes)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (sid, req.name, req.symbol.upper(), req.type,
+                 json.dumps(req.condition), json.dumps(req.action.model_dump()),
+                 int(req.enabled), now, account_mode, allowed_regimes_json),
+            )
+            await db.commit()
+        except aiosqlite.IntegrityError:
+            raise ValueError(
+                f"이미 동일한 전략이 존재합니다: {account_mode} / {req.symbol.upper()} / {req.type}"
+            )
     return await get_strategy(sid)
 
 

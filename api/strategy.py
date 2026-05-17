@@ -24,7 +24,10 @@ async def api_create(req: CreateStrategyRequest):
     if req.action.side == "buy" and req.action.qty_type == "all":
         raise HTTPException(400, "buy 전략에 qty_type=all은 사용 불가")
     account_mode = req.account_mode or get_trading_mode()
-    strategy = await create_strategy(req, account_mode=account_mode)
+    try:
+        strategy = await create_strategy(req, account_mode=account_mode)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return {"message": "전략 등록 완료", "strategy": strategy}
 
 
