@@ -59,7 +59,7 @@ async def get_strategy(sid: str) -> dict | None:
 async def create_strategy(req, account_mode: str) -> dict:
     sid = str(uuid.uuid4())[:8]
     now = datetime.now(timezone.utc).isoformat()
-    allowed_regimes_json = json.dumps(req.allowed_regimes) if req.allowed_regimes else None
+    allowed_regimes_json = json.dumps(sorted(req.allowed_regimes)) if req.allowed_regimes else None
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             await db.execute(
@@ -72,8 +72,9 @@ async def create_strategy(req, account_mode: str) -> dict:
             )
             await db.commit()
         except aiosqlite.IntegrityError as exc:
+            regimes = ", ".join(sorted(req.allowed_regimes)) if req.allowed_regimes else "전체"
             raise ValueError(
-                f"이미 동일한 전략이 존재합니다: {account_mode} / {req.symbol.upper()} / {req.type}"
+                f"이미 동일한 전략이 존재합니다: {account_mode} / {req.symbol.upper()} / {req.type} / {regimes}"
             ) from exc
     return await get_strategy(sid)
 
