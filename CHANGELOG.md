@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.16.0](https://github.com/haidj01/finly-agent/compare/v0.15.1...v0.16.0) (2026-05-18)
+
+
+### Features
+
+* **strategies:** soft delete instead of hard delete ([#52](https://github.com/haidj01/finly-agent/issues/52)) ([1b8f671](https://github.com/haidj01/finly-agent/commit/1b8f6710f18d605e68cb77821cc8a62ed3bbd27e))
+
 ## [0.15.1](https://github.com/haidj01/finly-agent/compare/v0.15.0...v0.15.1) (2026-05-18)
 
 
