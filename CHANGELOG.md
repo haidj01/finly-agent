@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.15.1](https://github.com/haidj01/finly-agent/compare/v0.15.0...v0.15.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* **engine:** use date-based bar fetch to fix RSI insufficient data ([#50](https://github.com/haidj01/finly-agent/issues/50)) ([480c1c5](https://github.com/haidj01/finly-agent/commit/480c1c569d966a9ebc0fd9aaa8912b429a71acc6))
+
 ## [0.15.0](https://github.com/haidj01/finly-agent/compare/v0.14.0...v0.15.0) (2026-05-18)
 
 
