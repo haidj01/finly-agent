@@ -1,9 +1,8 @@
 import json
-import aiosqlite
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from db import DB_PATH
+from db import get_pool
 from agents.portfolio import run_portfolio_analysis
 from agents.watchdog import load_config, save_config, run_watchdog
 
@@ -15,12 +14,11 @@ router = APIRouter(prefix="/api/agent")
 @router.get("/report")
 async def get_latest_report():
     """가장 최근 포트폴리오 리포트 조회. 없으면 즉시 생성."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
             "SELECT * FROM portfolio_reports ORDER BY generated_at DESC LIMIT 1"
         )
-        row = await cur.fetchone()
 
     if not row:
         await run_portfolio_analysis()
@@ -36,13 +34,13 @@ async def get_latest_report():
 @router.get("/reports")
 async def get_report_history(limit: int = 10):
     """리포트 히스토리 (최근 N개, content 제외)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            "SELECT id, generated_at FROM portfolio_reports ORDER BY generated_at DESC LIMIT ?",
-            (limit,)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, generated_at FROM portfolio_reports ORDER BY generated_at DESC LIMIT $1",
+            limit,
         )
-        return [dict(r) for r in await cur.fetchall()]
+        return [dict(r) for r in rows]
 
 
 @router.post("/report/generate")
@@ -62,13 +60,12 @@ class WatchdogConfig(BaseModel):
 
 @router.get("/watchdog/status")
 async def get_watchdog_status():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        logs = await conn.fetch(
             "SELECT * FROM strategy_logs WHERE strategy_id='watchdog' ORDER BY time DESC LIMIT 20"
         )
-        logs = [dict(r) for r in await cur.fetchall()]
-    return {"config": load_config(), "recent_logs": logs}
+    return {"config": load_config(), "recent_logs": [dict(r) for r in logs]}
 
 
 @router.post("/watchdog/config")
@@ -107,16 +104,20 @@ async def get_trade_history(
 ):
     conditions = []
     params: list = []
+    idx = 1
 
     if status:
-        conditions.append("sl.status = ?")
+        conditions.append(f"sl.status = ${idx}")
         params.append(status)
+        idx += 1
     if symbol:
-        conditions.append("sl.symbol = ?")
+        conditions.append(f"sl.symbol = ${idx}")
         params.append(symbol.upper())
+        idx += 1
     if mode:
-        conditions.append("sl.account_mode = ?")
+        conditions.append(f"sl.account_mode = ${idx}")
         params.append(mode)
+        idx += 1
     if source == "watchdog":
         conditions.append("sl.strategy_id = 'watchdog'")
     elif source == "strategy":
@@ -134,18 +135,15 @@ async def get_trade_history(
         LEFT JOIN strategies s ON sl.strategy_id = s.id
         {where}
         ORDER BY sl.time DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${idx} OFFSET ${idx + 1}
     """
+    count_query = f"SELECT COUNT(*) FROM strategy_logs sl {where}"
+    count_params = params[:]
     params += [limit, offset]
 
-    count_query = f"SELECT COUNT(*) FROM strategy_logs sl {where}"
-    count_params = params[:-2]
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
+        total = await conn.fetchval(count_query, *count_params)
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(query, params)
-        rows = [dict(r) for r in await cur.fetchall()]
-        cur2 = await db.execute(count_query, count_params)
-        total = (await cur2.fetchone())[0]
-
-    return {"total": total, "items": rows}
+    return {"total": total, "items": [dict(r) for r in rows]}

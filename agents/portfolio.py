@@ -9,8 +9,7 @@ import httpx
 import asyncio
 from datetime import datetime, timezone
 
-import aiosqlite
-from db import DB_PATH
+from db import get_pool
 from alpaca_cfg import trading_url, alpaca_headers
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
@@ -76,12 +75,12 @@ async def run_portfolio_analysis():
                 "분석 실패"
             ) if res.status_code == 200 else f"Claude 오류: {res.text}"
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO portfolio_reports (generated_at, content, positions, account) VALUES (?,?,?,?)",
-            (datetime.now(timezone.utc).isoformat(), content,
-             json.dumps(positions), json.dumps(account)),
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO portfolio_reports (generated_at, content, positions, account) VALUES ($1,$2,$3,$4)",
+            datetime.now(timezone.utc).isoformat(), content,
+            json.dumps(positions), json.dumps(account),
         )
-        await db.commit()
 
     print("[Portfolio] 리포트 저장 완료")

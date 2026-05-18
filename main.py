@@ -10,7 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from db import init_db
+from db import init_db, close_db
 from agents.portfolio import run_portfolio_analysis
 from agents.watchdog import run_watchdog
 from strategies.engine import run_strategy_engine
@@ -85,6 +85,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     scheduler.shutdown()
+    await close_db()
 
 
 @app.get("/health")

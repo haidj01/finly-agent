@@ -1,69 +1,76 @@
 """
-SQLite 초기화 및 헬퍼
-- finly-backend의 in-memory dict와 달리 재시작 후에도 전략/로그가 유지됩니다.
+PostgreSQL 초기화 및 헬퍼 (asyncpg)
+- finly-backend와 동일한 PostgreSQL 인스턴스를 공유합니다.
 """
 
 import os
+import asyncpg
 
-import aiosqlite
-
-DB_PATH = os.getenv("DB_PATH", "finly_agent.db")
+_pool: asyncpg.Pool | None = None  # pylint: disable=invalid-name
 
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.executescript("""
+    global _pool  # pylint: disable=global-statement
+    _pool = await asyncpg.create_pool(
+        dsn=os.environ["DATABASE_URL"],
+        min_size=2,
+        max_size=10,
+    )
+    async with _pool.acquire() as conn:
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS strategies (
-                id           TEXT PRIMARY KEY,
-                name         TEXT NOT NULL,
-                symbol       TEXT NOT NULL,
-                type         TEXT NOT NULL,
-                condition    TEXT NOT NULL,   -- JSON
-                action       TEXT NOT NULL,   -- JSON
-                enabled      INTEGER NOT NULL DEFAULT 1,
-                created_at   TEXT NOT NULL,
-                peak_price   REAL,
-                account_mode TEXT NOT NULL DEFAULT 'paper'
-            );
-
+                id              TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                symbol          TEXT NOT NULL,
+                type            TEXT NOT NULL,
+                condition       TEXT NOT NULL,
+                action          TEXT NOT NULL,
+                enabled         INTEGER NOT NULL DEFAULT 1,
+                created_at      TEXT NOT NULL,
+                peak_price      DOUBLE PRECISION,
+                account_mode    TEXT NOT NULL DEFAULT 'paper',
+                ma_cross_state  TEXT,
+                allowed_regimes TEXT DEFAULT NULL
+            )
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS strategy_logs (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                strategy_id TEXT NOT NULL,
-                time        TEXT NOT NULL,
-                symbol      TEXT NOT NULL,
-                side        TEXT NOT NULL,
-                qty         INTEGER,
-                reason      TEXT,
-                status      TEXT NOT NULL,   -- executed | failed | skipped
-                order_id    TEXT,
-                error       TEXT,
-                FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
-            );
-
+                id           BIGSERIAL PRIMARY KEY,
+                strategy_id  TEXT NOT NULL,
+                time         TEXT NOT NULL,
+                symbol       TEXT NOT NULL,
+                side         TEXT NOT NULL,
+                qty          INTEGER,
+                reason       TEXT,
+                status       TEXT NOT NULL,
+                order_id     TEXT,
+                error        TEXT,
+                account_mode TEXT NOT NULL DEFAULT 'paper'
+            )
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_reports (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                id           BIGSERIAL PRIMARY KEY,
                 generated_at TEXT NOT NULL,
                 content      TEXT NOT NULL,
-                positions    TEXT NOT NULL,  -- JSON
-                account      TEXT NOT NULL   -- JSON
-            );
+                positions    TEXT NOT NULL,
+                account      TEXT NOT NULL
+            )
         """)
-        await db.commit()
-        # 기존 DB 마이그레이션: peak_price 컬럼 추가
-        for migration in [
-            "ALTER TABLE strategies ADD COLUMN peak_price REAL",
-            "ALTER TABLE strategies ADD COLUMN ma_cross_state TEXT",
-            "ALTER TABLE strategies ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
-            "ALTER TABLE strategy_logs ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'paper'",
-            "ALTER TABLE strategies ADD COLUMN allowed_regimes TEXT DEFAULT NULL",
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_strategy ON strategies(account_mode, symbol, type)",
-        ]:
-            try:
-                await db.execute(migration)
-                await db.commit()
-            except Exception:  # pylint: disable=broad-exception-caught
-                pass  # 이미 존재하면 무시
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uniq_strategy
+            ON strategies(account_mode, symbol, type, COALESCE(allowed_regimes, ''))
+        """)
 
 
-async def get_db():
-    return aiosqlite.connect(DB_PATH)
+async def close_db():
+    global _pool  # pylint: disable=global-statement
+    if _pool:
+        await _pool.close()
+        _pool = None
+
+
+def get_pool() -> asyncpg.Pool:
+    if _pool is None:
+        raise RuntimeError("DB pool not initialized — call init_db() first")
+    return _pool

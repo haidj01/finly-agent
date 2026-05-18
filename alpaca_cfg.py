@@ -7,7 +7,7 @@ The file allows runtime switching without restart; the env var sets the deploy-t
 import os
 from pathlib import Path
 
-_MODE_FILE = Path(os.getenv("DB_PATH", "finly_agent.db")).parent / "trading_mode"
+_MODE_FILE = Path(os.getenv("AGENT_DATA_DIR", "/data")) / "trading_mode"
 
 
 def get_trading_mode() -> str:
