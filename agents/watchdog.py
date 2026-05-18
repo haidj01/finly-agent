@@ -14,13 +14,27 @@ from db import get_pool
 from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 
 CONFIG_PATH    = Path(os.getenv("AGENT_DATA_DIR", "/data")) / "watchdog_config.json"
-DEFAULT_CONFIG = {"enabled": False, "drop_pct": 5.0, "max_sell_qty": 10}
+DEFAULT_MODE_CONFIG = {"enabled": False, "drop_pct": 5.0, "max_sell_qty": 10}
+DEFAULT_CONFIG = {
+    "paper": DEFAULT_MODE_CONFIG.copy(),
+    "live":  DEFAULT_MODE_CONFIG.copy(),
+}
 
 
 def load_config() -> dict:
     if CONFIG_PATH.exists():
-        return json.loads(CONFIG_PATH.read_text())
-    return DEFAULT_CONFIG.copy()
+        cfg = json.loads(CONFIG_PATH.read_text())
+        # 구버전 flat 포맷 → per-mode 포맷 마이그레이션
+        if "paper" not in cfg and "live" not in cfg:
+            mode_cfg = {
+                "enabled":      cfg.get("enabled", False),
+                "drop_pct":     cfg.get("drop_pct", 5.0),
+                "max_sell_qty": cfg.get("max_sell_qty", 10),
+            }
+            cfg = {"paper": mode_cfg.copy(), "live": mode_cfg.copy()}
+            save_config(cfg)
+        return cfg
+    return {"paper": DEFAULT_MODE_CONFIG.copy(), "live": DEFAULT_MODE_CONFIG.copy()}
 
 
 def save_config(cfg: dict):
@@ -29,7 +43,8 @@ def save_config(cfg: dict):
 
 async def run_watchdog():
     cfg = load_config()
-    if not cfg["enabled"]:
+    mode = get_trading_mode()
+    if not cfg[mode]["enabled"]:
         return
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -42,15 +57,16 @@ async def run_watchdog():
             return
 
         pool = get_pool()
+        mode_cfg = cfg[mode]
         for pos in pos_res.json():
             sym      = pos["symbol"]
             drop_pct = float(pos.get("unrealized_plpc", 0)) * 100
-            threshold = cfg["drop_pct"]
+            threshold = mode_cfg["drop_pct"]
 
             if drop_pct > -threshold:
                 continue
 
-            qty = min(int(float(pos["qty"])), cfg["max_sell_qty"])
+            qty = min(int(float(pos["qty"])), mode_cfg["max_sell_qty"])
             reason = f"손실 {abs(drop_pct):.1f}% (임계값 {threshold}%)"
 
             order_res = await client.post(

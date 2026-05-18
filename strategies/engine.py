@@ -4,8 +4,11 @@ Strategy Execution Engine
 """
 
 import asyncio
+import json
 import logging
+import os
 import httpx
+from pathlib import Path
 from strategies.store import list_strategies, append_log, toggle_strategy, update_peak_price, update_ma_cross_state
 from strategies.rsi import calc_rsi
 from strategies.ma import calc_ma
@@ -16,6 +19,22 @@ from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 logger = logging.getLogger(__name__)
 
 DATA = "https://data.alpaca.markets"
+
+ENGINE_CONFIG_PATH    = Path(os.getenv("AGENT_DATA_DIR", "/data")) / "engine_config.json"
+DEFAULT_ENGINE_CONFIG = {
+    "paper": {"enabled": True},
+    "live":  {"enabled": True},
+}
+
+
+def load_engine_config() -> dict:
+    if ENGINE_CONFIG_PATH.exists():
+        return json.loads(ENGINE_CONFIG_PATH.read_text())
+    return {"paper": {"enabled": True}, "live": {"enabled": True}}
+
+
+def save_engine_config(cfg: dict):
+    ENGINE_CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
 
 # A: 시장 국면별 엔진 수준 강제 차단
 # 2-tuple (type, side)         — direction 무관 차단
@@ -42,6 +61,9 @@ def _is_hard_blocked(blocked: set, stype: str, side: str, direction: str) -> boo
 
 async def run_strategy_engine():
     mode = get_trading_mode()
+    engine_cfg = load_engine_config()
+    if not engine_cfg[mode]["enabled"]:
+        return
     strategies = [s for s in await list_strategies(mode=mode) if s["enabled"]]
     if not strategies:
         return
