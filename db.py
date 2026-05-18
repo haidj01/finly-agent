@@ -6,7 +6,7 @@ PostgreSQL 초기화 및 헬퍼 (asyncpg)
 import os
 import asyncpg
 
-_pool: asyncpg.Pool | None = None
+_pool: asyncpg.Pool | None = None  # pylint: disable=invalid-name
 
 
 async def init_db():
