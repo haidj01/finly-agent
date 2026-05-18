@@ -24,17 +24,17 @@ async def list_strategies(mode: str | None = None) -> list[dict]:
     async with pool.acquire() as conn:
         if mode:
             rows = await conn.fetch(
-                "SELECT * FROM strategies WHERE account_mode=$1 ORDER BY created_at DESC", mode
+                "SELECT * FROM strategies WHERE account_mode=$1 AND deleted_at IS NULL ORDER BY created_at DESC", mode
             )
         else:
-            rows = await conn.fetch("SELECT * FROM strategies ORDER BY created_at DESC")
+            rows = await conn.fetch("SELECT * FROM strategies WHERE deleted_at IS NULL ORDER BY created_at DESC")
         return [_parse_strategy_row(r) for r in rows]
 
 
 async def get_strategy(sid: str) -> dict | None:
     pool = get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT * FROM strategies WHERE id=$1", sid)
+        row = await conn.fetchrow("SELECT * FROM strategies WHERE id=$1 AND deleted_at IS NULL", sid)
         if not row:
             return None
         s = _parse_strategy_row(row)
@@ -71,7 +71,7 @@ async def create_strategy(req, account_mode: str) -> dict:
 async def toggle_strategy(sid: str) -> dict | None:
     pool = get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT enabled, type FROM strategies WHERE id=$1", sid)
+        row = await conn.fetchrow("SELECT enabled, type FROM strategies WHERE id=$1 AND deleted_at IS NULL", sid)
         if not row:
             return None
         new_val = 0 if row["enabled"] else 1
@@ -95,9 +95,12 @@ async def update_ma_cross_state(sid: str, state: str) -> None:
 
 
 async def delete_strategy(sid: str) -> bool:
+    now = datetime.now(timezone.utc).isoformat()
     pool = get_pool()
     async with pool.acquire() as conn:
-        result = await conn.execute("DELETE FROM strategies WHERE id=$1", sid)
+        result = await conn.execute(
+            "UPDATE strategies SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL", now, sid
+        )
         return int(result.split()[-1]) > 0
 
 
