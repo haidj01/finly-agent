@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from db import get_pool
 from agents.portfolio import run_portfolio_analysis
 from agents.watchdog import load_config, save_config, run_watchdog
+from strategies.engine import load_engine_config, save_engine_config
 
 router = APIRouter(prefix="/api/agent")
 
@@ -52,8 +53,9 @@ async def generate_report():
 
 # ── Watchdog ──────────────────────────────────────────────────
 
-class WatchdogConfig(BaseModel):
-    enabled:      bool  = True
+class WatchdogModeConfig(BaseModel):
+    mode:         str   # 'paper' | 'live'
+    enabled:      bool
     drop_pct:     float = 5.0
     max_sell_qty: int   = 10
 
@@ -69,19 +71,45 @@ async def get_watchdog_status():
 
 
 @router.post("/watchdog/config")
-async def update_watchdog(req: WatchdogConfig):
+async def update_watchdog(req: WatchdogModeConfig):
+    if req.mode not in ("paper", "live"):
+        raise HTTPException(400, "mode는 'paper' 또는 'live'여야 합니다.")
     if req.drop_pct <= 0 or req.drop_pct > 50:
         raise HTTPException(400, "drop_pct는 0~50 사이여야 합니다.")
     if req.max_sell_qty < 1 or req.max_sell_qty > 1000:
         raise HTTPException(400, "max_sell_qty는 1~1000 사이여야 합니다.")
-    save_config(req.model_dump())
-    return {"message": "워치독 설정 업데이트", "config": req.model_dump()}
+    cfg = load_config()
+    cfg[req.mode] = {"enabled": req.enabled, "drop_pct": req.drop_pct, "max_sell_qty": req.max_sell_qty}
+    save_config(cfg)
+    return {"message": "워치독 설정 업데이트", "config": cfg}
 
 
 @router.post("/watchdog/run")
 async def trigger_watchdog():
     await run_watchdog()
     return {"message": "워치독 실행 완료"}
+
+
+# ── Strategy Engine ───────────────────────────────────────────
+
+class EngineModeConfig(BaseModel):
+    mode:    str   # 'paper' | 'live'
+    enabled: bool
+
+
+@router.get("/engine/status")
+async def get_engine_status():
+    return {"config": load_engine_config()}
+
+
+@router.post("/engine/config")
+async def update_engine_config(req: EngineModeConfig):
+    if req.mode not in ("paper", "live"):
+        raise HTTPException(400, "mode는 'paper' 또는 'live'여야 합니다.")
+    cfg = load_engine_config()
+    cfg[req.mode]["enabled"] = req.enabled
+    save_engine_config(cfg)
+    return {"message": "전략 엔진 설정 업데이트", "config": cfg}
 
 
 # ── Strategy Recommendations ──────────────────────────────────
