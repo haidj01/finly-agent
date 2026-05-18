@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.14.0](https://github.com/haidj01/finly-agent/compare/v0.13.0...v0.14.0) (2026-05-18)
+
+
+### Features
+
+* **db:** add watchlist table DDL and query helpers ([#46](https://github.com/haidj01/finly-agent/issues/46)) ([6e5c8ee](https://github.com/haidj01/finly-agent/commit/6e5c8eeb3c324d65f985aa3979e28421a6899d8b))
+
 ## [0.13.0](https://github.com/haidj01/finly-agent/compare/v0.12.0...v0.13.0) (2026-05-18)
 
 
