@@ -5,14 +5,14 @@ StrategyType = Literal[
     "stop_loss", "take_profit", "price_target", "trailing_stop",
     "rsi_threshold", "ma_cross", "bollinger_band",
 ]
-QtyType      = Literal["shares", "all"]
+QtyType      = Literal["shares", "notional", "all"]
 Direction    = Literal["above", "below"]
 AccountMode  = Literal["paper", "live"]
 
 
 class StrategyAction(BaseModel):
     side:     Literal["buy", "sell"]
-    qty:      Optional[int] = Field(None, gt=0, le=10000)
+    qty:      Optional[float] = Field(None, gt=0, le=10000)
     qty_type: QtyType = "shares"
 
 

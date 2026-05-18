@@ -5,15 +5,15 @@ Watchdog Agent
 """
 
 import json
+import os
 import httpx
 from datetime import datetime, timezone
 from pathlib import Path
 
-import aiosqlite
-from db import DB_PATH
+from db import get_pool
 from alpaca_cfg import trading_url, alpaca_headers, get_trading_mode
 
-CONFIG_PATH    = Path(DB_PATH).parent / "watchdog_config.json"
+CONFIG_PATH    = Path(os.getenv("AGENT_DATA_DIR", "/data")) / "watchdog_config.json"
 DEFAULT_CONFIG = {"enabled": False, "drop_pct": 5.0, "max_sell_qty": 10}
 
 
@@ -41,6 +41,7 @@ async def run_watchdog():
         if pos_res.status_code != 200:
             return
 
+        pool = get_pool()
         for pos in pos_res.json():
             sym      = pos["symbol"]
             drop_pct = float(pos.get("unrealized_plpc", 0)) * 100
@@ -63,15 +64,14 @@ async def run_watchdog():
             order_id = order_res.json().get("id") if status == "executed" else None
             error    = order_res.text if status == "failed" else None
 
-            async with aiosqlite.connect(DB_PATH) as db:
-                await db.execute(
+            async with pool.acquire() as conn:
+                await conn.execute(
                     """INSERT INTO strategy_logs
                        (strategy_id, time, symbol, side, qty, reason, status, order_id, error, account_mode)
-                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                    ("watchdog", datetime.now(timezone.utc).isoformat(),
-                     sym, "sell", qty, reason, status, order_id, error, get_trading_mode()),
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+                    "watchdog", datetime.now(timezone.utc).isoformat(),
+                    sym, "sell", qty, reason, status, order_id, error, get_trading_mode(),
                 )
-                await db.commit()
 
             label = "✅" if status == "executed" else "❌"
             print(f"[Watchdog] {label} {sym} 매도 {qty}주 | {reason}")
