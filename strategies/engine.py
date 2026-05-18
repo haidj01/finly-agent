@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import httpx
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from strategies.store import list_strategies, append_log, toggle_strategy, update_peak_price, update_ma_cross_state
 from strategies.rsi import calc_rsi
@@ -95,10 +96,11 @@ async def run_strategy_engine():
                        headers=alpaca_headers()),
         ]
         if bar_symbols:
+            bar_start = (datetime.now(timezone.utc) - timedelta(days=120)).strftime("%Y-%m-%d")
             fetch_tasks.append(
                 client.get(f"{DATA}/v2/stocks/bars",
                            params={"symbols": ",".join(bar_symbols), "timeframe": "1Day",
-                                   "limit": 50, "sort": "asc", "feed": "iex"},
+                                   "start": bar_start, "sort": "asc", "feed": "iex"},
                            headers=alpaca_headers())
             )
 
