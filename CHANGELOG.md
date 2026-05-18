@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.15.0](https://github.com/haidj01/finly-agent/compare/v0.14.0...v0.15.0) (2026-05-18)
+
+
+### Features
+
+* per-mode (paper/live) enable/disable for watchdog and strategy engine ([#48](https://github.com/haidj01/finly-agent/issues/48)) ([3c99be9](https://github.com/haidj01/finly-agent/commit/3c99be926b2d383afd376d4b22aba2cdcd00f6c7))
+
 ## [0.14.0](https://github.com/haidj01/finly-agent/compare/v0.13.0...v0.14.0) (2026-05-18)
 
 
