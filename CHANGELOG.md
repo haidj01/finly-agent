@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.13.0](https://github.com/haidj01/finly-agent/compare/v0.12.0...v0.13.0) (2026-05-18)
+
+
+### Features
+
+* migrate finly-agent DB from SQLite to PostgreSQL (asyncpg) ([#44](https://github.com/haidj01/finly-agent/issues/44)) ([17f3727](https://github.com/haidj01/finly-agent/commit/17f372708d2016791df7f7515f9bb2fada5e8a72))
+
 ## [0.12.0](https://github.com/haidj01/finly-agent/compare/v0.11.6...v0.12.0) (2026-05-17)
 
 
