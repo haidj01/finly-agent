@@ -30,9 +30,13 @@ async def init_db():
                 peak_price      DOUBLE PRECISION,
                 account_mode    TEXT NOT NULL DEFAULT 'paper',
                 ma_cross_state  TEXT,
-                allowed_regimes TEXT DEFAULT NULL
+                allowed_regimes TEXT DEFAULT NULL,
+                deleted_at      TEXT DEFAULT NULL
             )
         """)
+        await conn.execute(
+            "ALTER TABLE strategies ADD COLUMN IF NOT EXISTS deleted_at TEXT DEFAULT NULL"
+        )
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS strategy_logs (
                 id           BIGSERIAL PRIMARY KEY,
@@ -57,9 +61,11 @@ async def init_db():
                 account      TEXT NOT NULL
             )
         """)
+        await conn.execute("DROP INDEX IF EXISTS uniq_strategy")
         await conn.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS uniq_strategy
+            CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_strategy
             ON strategies(account_mode, symbol, type, COALESCE(allowed_regimes, ''))
+            WHERE deleted_at IS NULL
         """)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS watchlist (
