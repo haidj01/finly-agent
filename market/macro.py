@@ -17,6 +17,7 @@ macro_signal:
 import logging
 import os
 import time
+from datetime import datetime, timezone
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -184,5 +185,4 @@ def _neutral(reason: str) -> dict:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat()

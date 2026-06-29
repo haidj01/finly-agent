@@ -112,6 +112,13 @@ _VALID_SIDES    = frozenset({"buy", "sell"})
 _VALID_QTY_TYPES = frozenset({"shares", "notional", "all"})
 _REQUIRED_FIELDS = ("type", "symbol", "name", "condition", "action", "reason")
 
+_MACRO_LABEL = {"hawkish": "긴축(Hawkish)", "dovish": "완화(Dovish)", "neutral": "중립(Neutral)"}
+_MACRO_RULE  = {
+    "hawkish": "긴축 환경입니다. 매수 전략은 보수적 파라미터(낮은 notional, 타이트한 손절)를 적용하고 상승 추세 신호를 과신하지 마세요.",
+    "dovish":  "완화 환경입니다. 하락 신호 신뢰도가 낮을 수 있으며 반등 가능성을 고려하세요.",
+    "neutral": "매크로 환경은 중립입니다. 기술적 신호를 우선 따르세요.",
+}
+
 
 def _extract_json(text: str) -> str:
     """응답에서 JSON 배열 문자열을 추출한다.
@@ -362,12 +369,6 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
         rate   = macro_bias.get("fed_rate")
         vix    = macro_bias.get("vix")
 
-        _MACRO_LABEL = {"hawkish": "긴축(Hawkish)", "dovish": "완화(Dovish)", "neutral": "중립(Neutral)"}
-        _MACRO_RULE  = {
-            "hawkish": "긴축 환경입니다. 매수 전략은 보수적 파라미터(낮은 notional, 타이트한 손절)를 적용하고 상승 추세 신호를 과신하지 마세요.",
-            "dovish":  "완화 환경입니다. 하락 신호 신뢰도가 낮을 수 있으며 반등 가능성을 고려하세요.",
-            "neutral": "매크로 환경은 중립입니다. 기술적 신호를 우선 따르세요.",
-        }
         spread_str = f"{spread:+.2f}%" if spread is not None else "N/A"
         rate_str   = f"{rate:.2f}%"    if rate   is not None else "N/A"
         vix_str    = f"{vix:.1f}"      if vix    is not None else "N/A"
