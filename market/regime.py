@@ -23,6 +23,7 @@ from strategies.bb import calc_bollinger
 from strategies.adx import calc_adx
 from strategies.macd import calc_macd
 from alpaca_cfg import alpaca_headers
+from market.macro import fetch_macro_bias
 
 logger = logging.getLogger(__name__)
 
@@ -171,19 +172,43 @@ async def classify_market_regime(client: httpx.AsyncClient | None = None) -> dic
             _cb.failure()
             return _cache.get("result") or _default("모든 프록시 데이터 오류")
 
-        # 4. 가중 투표 → 최종 국면
+        # 4. FRED 매크로 편향 조회 (24h 캐시 — 실패해도 neutral로 계속 진행)
+        try:
+            macro_bias = await fetch_macro_bias()
+        except Exception:  # pylint: disable=broad-exception-caught
+            macro_bias = {"macro_signal": "neutral"}
+
+        # 5. 가중 투표 — 각 프록시 trend_score에 macro 조정 후 재분류
         votes: dict[str, float] = {}
         for symbol, res in proxy_results.items():
             r        = res["regime"]
             votes[r] = votes.get(r, 0.0) + PROXIES[symbol]
         final_regime = max(votes, key=votes.get)
 
-        # 5. 상세 정보: SPY 기준 (없으면 첫 번째 가용 프록시)
+        # macro 조정: 가중 투표 결과에서 trend 방향이 macro와 충돌하면 보정
+        macro_signal = macro_bias.get("macro_signal", "neutral")
+        if macro_signal == "hawkish" and final_regime == "trending":
+            # 긴축 환경에서 기술적 상승 추세 → ranging으로 보수 처리
+            trending_votes = votes.get("trending", 0.0)
+            ranging_votes  = votes.get("ranging", 0.0)
+            if trending_votes - ranging_votes < 0.3:  # 우세가 크지 않을 때만 조정
+                final_regime = "ranging"
+                logger.debug("macro hawkish — trending → ranging 보정")
+        elif macro_signal == "dovish" and final_regime == "bearish":
+            # 완화 환경에서 기술적 하락 → volatile로 완화
+            bearish_votes  = votes.get("bearish", 0.0)
+            volatile_votes = votes.get("volatile", 0.0)
+            if bearish_votes - volatile_votes < 0.3:
+                final_regime = "volatile"
+                logger.debug("macro dovish — bearish → volatile 보정")
+
+        # 6. 상세 정보: SPY 기준 (없으면 첫 번째 가용 프록시)
         primary = proxy_results.get("SPY") or next(iter(proxy_results.values()))
         details = {
             **primary,
             "proxy_regimes": {s: r["regime"] for s, r in proxy_results.items()},
             "proxy_votes":   {k: round(v, 2) for k, v in votes.items()},
+            "macro":         macro_bias,
         }
 
         result = {

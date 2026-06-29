@@ -112,6 +112,13 @@ _VALID_SIDES    = frozenset({"buy", "sell"})
 _VALID_QTY_TYPES = frozenset({"shares", "notional", "all"})
 _REQUIRED_FIELDS = ("type", "symbol", "name", "condition", "action", "reason")
 
+_MACRO_LABEL = {"hawkish": "긴축(Hawkish)", "dovish": "완화(Dovish)", "neutral": "중립(Neutral)"}
+_MACRO_RULE  = {
+    "hawkish": "긴축 환경입니다. 매수 전략은 보수적 파라미터(낮은 notional, 타이트한 손절)를 적용하고 상승 추세 신호를 과신하지 마세요.",
+    "dovish":  "완화 환경입니다. 하락 신호 신뢰도가 낮을 수 있으며 반등 가능성을 고려하세요.",
+    "neutral": "매크로 환경은 중립입니다. 기술적 신호를 우선 따르세요.",
+}
+
 
 def _extract_json(text: str) -> str:
     """응답에서 JSON 배열 문자열을 추출한다.
@@ -218,8 +225,9 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
     regime_label = regime_info.get("label", "횡보장")
     details      = regime_info.get("details", {})
     signals      = details.get("signals", {})
+    macro_bias   = details.get("macro", {})
 
-    prompt = _build_prompt(regime, regime_label, details, signals, positions, symbol, account)
+    prompt = _build_prompt(regime, regime_label, details, signals, positions, symbol, account, macro_bias)
 
     for attempt in range(_MAX_RETRIES + 1):
         try:
@@ -287,6 +295,7 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 "regime_label":    regime_label,
                 "size_factor":     regime_info.get("size_factor", 1.0),
                 "details":         details,
+                "macro":           macro_bias,
                 "account":         _account_summary(account),
                 "recommendations": validated,
             }
@@ -329,7 +338,8 @@ def _account_summary(account: dict) -> dict:
 
 
 def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
-                  positions: list, symbol: str | None, account: dict | None = None) -> str:
+                  positions: list, symbol: str | None, account: dict | None = None,
+                  macro_bias: dict | None = None) -> str:
     pos_lines = "\n".join(
         f"- {_escape_prompt_field(p['symbol'])}: {float(p['qty']):.0f}주 | 평균단가 ${float(p['avg_entry_price']):.2f} | "
         f"현재가 ${float(p['current_price']):.2f} | 손익 {float(p['unrealized_plpc'])*100:.2f}%"
@@ -350,6 +360,24 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
             f"\n## 계좌 현황\n"
             f"- 총 자산: ${port_value or '-'} | 현금: ${cash} | 매수가능금액: ${buying_power or cash}\n"
             f"- 1회 매수 상한: ${max_single_buy} (가용 현금의 30%)"
+        )
+
+    macro_lines = ""
+    if macro_bias:
+        msig   = macro_bias.get("macro_signal", "neutral")
+        spread = macro_bias.get("yield_spread")
+        rate   = macro_bias.get("fed_rate")
+        vix    = macro_bias.get("vix")
+
+        spread_str = f"{spread:+.2f}%" if spread is not None else "N/A"
+        rate_str   = f"{rate:.2f}%"    if rate   is not None else "N/A"
+        vix_str    = f"{vix:.1f}"      if vix    is not None else "N/A"
+
+        macro_lines = (
+            f"\n## FRED 거시지표 (매크로 환경)\n"
+            f"- 신호: **{_MACRO_LABEL.get(msig, msig)}** | "
+            f"10Y-2Y 스프레드: {spread_str} | 기준금리(DFF): {rate_str} | VIX: {vix_str}\n"
+            f"- 지침: {_MACRO_RULE.get(msig, '')}"
         )
 
     symbol_ctx = ""
@@ -389,7 +417,7 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
 - BB폭: {details.get('bb_width_pct', '-')}% ({signals.get('volatility', '-')})
 - MA 크로스: {signals.get('ma_cross', '-')}
 - ADX(14): {details.get('adx14', '-')} ({signals.get('adx_strength', '-')}) | +DI={details.get('plus_di', '-')} / -DI={details.get('minus_di', '-')} ({signals.get('di_direction', '-')})
-- MACD(12,26,9): 히스토그램={details.get('macd_hist', '-')} ({signals.get('macd_momentum', '-')}){acct_lines}
+- MACD(12,26,9): 히스토그램={details.get('macd_hist', '-')} ({signals.get('macd_momentum', '-')}){macro_lines}{acct_lines}
 
 ## 현재 보유 포지션
 {pos_lines}{symbol_ctx}
@@ -480,11 +508,13 @@ def _fallback(regime_info: dict, reason: str, positions: list | None = None,
             adjusted.append(t)
         templates = adjusted
 
+    fallback_details = regime_info.get("details", {})
     return {
         "regime":          regime,
         "regime_label":    regime_info.get("label", "횡보장"),
         "size_factor":     regime_info.get("size_factor", 1.0),
-        "details":         regime_info.get("details", {}),
+        "details":         fallback_details,
+        "macro":           fallback_details.get("macro", {}),
         "account":         _account_summary(account) if account else {},
         "recommendations": _adapt_fallback(templates, positions or []),
         "fallback_reason": reason,
