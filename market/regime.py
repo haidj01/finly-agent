@@ -23,7 +23,7 @@ from strategies.bb import calc_bollinger
 from strategies.adx import calc_adx
 from strategies.macd import calc_macd
 from alpaca_cfg import alpaca_headers
-from market.macro import fetch_macro_bias, apply_macro_adjustment
+from market.macro import fetch_macro_bias
 
 logger = logging.getLogger(__name__)
 
