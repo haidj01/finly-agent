@@ -206,16 +206,20 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
         symbol = _sanitize_symbol(symbol)
 
     async with httpx.AsyncClient(timeout=30) as client:
-        regime_info = await classify_market_regime(client)
-        pos_res     = await client.get(f"{trading_url()}/v2/positions", headers=alpaca_headers())
+        regime_info, pos_res, acct_res = await asyncio.gather(
+            classify_market_regime(client),
+            client.get(f"{trading_url()}/v2/positions", headers=alpaca_headers()),
+            client.get(f"{trading_url()}/v2/account",   headers=alpaca_headers()),
+        )
 
-    positions    = pos_res.json() if pos_res.status_code == 200 else []
+    positions    = pos_res.json()  if pos_res.status_code  == 200 else []
+    account      = acct_res.json() if acct_res.status_code == 200 else {}
     regime       = regime_info.get("regime", "ranging")
     regime_label = regime_info.get("label", "횡보장")
     details      = regime_info.get("details", {})
     signals      = details.get("signals", {})
 
-    prompt = _build_prompt(regime, regime_label, details, signals, positions, symbol)
+    prompt = _build_prompt(regime, regime_label, details, signals, positions, symbol, account)
 
     for attempt in range(_MAX_RETRIES + 1):
         try:
@@ -247,7 +251,7 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "Claude API 오류", positions)
+                return _fallback(regime_info, "Claude API 오류", positions, account)
 
             raw  = res.json()["content"][0]["text"].strip()
             text = _extract_json(raw)
@@ -260,14 +264,14 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "JSON 파싱 실패", positions)
+                return _fallback(regime_info, "JSON 파싱 실패", positions, account)
 
             if not isinstance(recommendations, list):
                 logger.warning("Claude 응답이 list가 아님 (attempt %d): %s", attempt + 1, type(recommendations))
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "응답 형식 오류", positions)
+                return _fallback(regime_info, "응답 형식 오류", positions, account)
 
             validated = _validate_recommendations(recommendations)
             if not validated:
@@ -276,13 +280,14 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
                 if attempt < _MAX_RETRIES:
                     await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                     continue
-                return _fallback(regime_info, "유효한 추천 없음", positions)
+                return _fallback(regime_info, "유효한 추천 없음", positions, account)
 
             return {
                 "regime":          regime,
                 "regime_label":    regime_label,
                 "size_factor":     regime_info.get("size_factor", 1.0),
                 "details":         details,
+                "account":         _account_summary(account),
                 "recommendations": validated,
             }
 
@@ -292,29 +297,60 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                 continue
-            return _fallback(regime_info, f"네트워크 오류: {exc}", positions)
+            return _fallback(regime_info, f"네트워크 오류: {exc}", positions, account)
 
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.exception("Claude API 예상치 못한 오류 (attempt %d/%d)", attempt + 1, _MAX_RETRIES + 1)
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_BASE * (2 ** attempt))
                 continue
-            return _fallback(regime_info, f"내부 오류: {exc}", positions)
+            return _fallback(regime_info, f"내부 오류: {exc}", positions, account)
 
-    return _fallback(regime_info, "재시도 초과", positions)
+    return _fallback(regime_info, "재시도 초과", positions, account)
 
 
 # ---------------------------------------------------------------------------
 # 내부 헬퍼
 # ---------------------------------------------------------------------------
 
+def _account_summary(account: dict) -> dict:
+    """계좌 정보에서 핵심 수치만 추출한다."""
+    def _f(key: str) -> float | None:
+        try:
+            return round(float(account[key]), 2)
+        except (KeyError, ValueError, TypeError):
+            return None
+    return {
+        "cash":            _f("cash"),
+        "portfolio_value": _f("portfolio_value"),
+        "equity":          _f("equity"),
+        "buying_power":    _f("buying_power"),
+    }
+
+
 def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
-                  positions: list, symbol: str | None) -> str:
+                  positions: list, symbol: str | None, account: dict | None = None) -> str:
     pos_lines = "\n".join(
         f"- {_escape_prompt_field(p['symbol'])}: {float(p['qty']):.0f}주 | 평균단가 ${float(p['avg_entry_price']):.2f} | "
         f"현재가 ${float(p['current_price']):.2f} | 손익 {float(p['unrealized_plpc'])*100:.2f}%"
         for p in positions[:20]
     ) if positions else "없음"
+
+    acct = _account_summary(account) if account else {}
+    cash         = acct.get("cash")
+    port_value   = acct.get("portfolio_value") or acct.get("equity")
+    buying_power = acct.get("buying_power")
+
+    # 매수 1건당 현금의 최대 30%로 제한 (최소 $10 보장)
+    max_single_buy = round(max(10.0, (cash or 0) * 0.30), 2) if cash else None
+
+    acct_lines = ""
+    if cash is not None:
+        acct_lines = (
+            f"\n## 계좌 현황\n"
+            f"- 총 자산: ${port_value or '-'} | 현금: ${cash} | 매수가능금액: ${buying_power or cash}\n"
+            f"- 1회 매수 상한: ${max_single_buy} (가용 현금의 30%)"
+        )
 
     symbol_ctx = ""
     if symbol:
@@ -339,6 +375,12 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
         "포지션 중 종목을 활용하거나, 포지션이 없으면 SPY를 예시 종목으로 쓰세요."
     )
 
+    cash_rule = (
+        f"매수(buy) notional은 반드시 ${max_single_buy} 이하로 설정하세요 (가용 현금 ${cash}의 30% 한도)."
+        if max_single_buy else
+        "매수 notional은 $10–$500 범위로 설정하세요."
+    )
+
     return f"""자동매매 시스템을 위한 전략을 추천해주세요.
 
 ## 현재 시장 국면: {regime_label} ({regime})
@@ -347,7 +389,7 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
 - BB폭: {details.get('bb_width_pct', '-')}% ({signals.get('volatility', '-')})
 - MA 크로스: {signals.get('ma_cross', '-')}
 - ADX(14): {details.get('adx14', '-')} ({signals.get('adx_strength', '-')}) | +DI={details.get('plus_di', '-')} / -DI={details.get('minus_di', '-')} ({signals.get('di_direction', '-')})
-- MACD(12,26,9): 히스토그램={details.get('macd_hist', '-')} ({signals.get('macd_momentum', '-')})
+- MACD(12,26,9): 히스토그램={details.get('macd_hist', '-')} ({signals.get('macd_momentum', '-')}){acct_lines}
 
 ## 현재 보유 포지션
 {pos_lines}{symbol_ctx}
@@ -355,6 +397,7 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
 ## 요청
 이 시장 국면에서 효과적인 자동매매 전략 3가지를 추천해주세요.
 {symbol_note}
+{cash_rule}
 
 **JSON 배열만 응답. 마크다운이나 설명 텍스트 없이 순수 JSON만.**
 
@@ -412,15 +455,37 @@ def _adapt_fallback(templates: list[dict], positions: list) -> list[dict]:
     return result
 
 
-def _fallback(regime_info: dict, reason: str, positions: list | None = None) -> dict:
+def _fallback(regime_info: dict, reason: str, positions: list | None = None,
+              account: dict | None = None) -> dict:
     regime = regime_info.get("regime", "ranging")
     logger.warning("Fallback 추천 사용: %s (국면=%s)", reason, regime)
     templates = _FALLBACK.get(regime, [])
+
+    # 현금이 있으면 fallback notional을 현금의 30%로 조정
+    cash = None
+    if account:
+        try:
+            cash = float(account.get("cash", 0) or 0)
+        except (ValueError, TypeError):
+            cash = None
+    if cash and cash > 0:
+        max_notional = round(max(10.0, cash * 0.30), 2)
+        adjusted = []
+        for tmpl in templates:
+            t = dict(tmpl)
+            action = dict(t.get("action", {}))
+            if action.get("qty_type") == "notional":
+                action["qty"] = min(float(action.get("qty", max_notional)), max_notional)
+                t["action"] = action
+            adjusted.append(t)
+        templates = adjusted
+
     return {
         "regime":          regime,
         "regime_label":    regime_info.get("label", "횡보장"),
         "size_factor":     regime_info.get("size_factor", 1.0),
         "details":         regime_info.get("details", {}),
+        "account":         _account_summary(account) if account else {},
         "recommendations": _adapt_fallback(templates, positions or []),
         "fallback_reason": reason,
     }
