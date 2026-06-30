@@ -4,6 +4,7 @@ PostgreSQL 초기화 및 헬퍼 (asyncpg)
 """
 
 import os
+from datetime import datetime, timezone
 import asyncpg
 
 _pool: asyncpg.Pool | None = None  # pylint: disable=invalid-name
@@ -76,6 +77,17 @@ async def init_db():
                 modified_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS strategy_lessons (
+                id          BIGSERIAL PRIMARY KEY,
+                created_at  TEXT NOT NULL,
+                trade_date  TEXT NOT NULL,
+                regime      TEXT,
+                lesson      TEXT NOT NULL,
+                pnl_usd     DOUBLE PRECISION,
+                source      TEXT NOT NULL DEFAULT 'reflector'
+            )
+        """)
 
 
 async def close_db():
@@ -108,3 +120,35 @@ async def is_in_watchlist(symbol: str) -> bool:
             symbol.upper(),
         )
     return row is not None
+
+
+async def save_lesson(
+    lesson: str,
+    trade_date: str,
+    regime: str | None = None,
+    pnl_usd: float | None = None,
+) -> None:
+    """반성 교훈을 strategy_lessons 테이블에 저장합니다."""
+    async with get_pool().acquire() as conn:
+        await conn.execute(
+            """INSERT INTO strategy_lessons (created_at, trade_date, regime, lesson, pnl_usd)
+               VALUES ($1, $2, $3, $4, $5)""",
+            datetime.now(timezone.utc).isoformat(),
+            trade_date,
+            regime,
+            lesson,
+            pnl_usd,
+        )
+
+
+async def get_recent_lessons(limit: int = 5) -> list[dict]:
+    """최근 교훈을 최신순으로 반환합니다."""
+    async with get_pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT lesson, regime, trade_date, pnl_usd
+               FROM strategy_lessons
+               ORDER BY id DESC
+               LIMIT $1""",
+            limit,
+        )
+    return [dict(r) for r in rows]
