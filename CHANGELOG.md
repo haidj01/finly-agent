@@ -1,6 +1,16 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.17.0](https://github.com/haidj01/finly-agent/compare/v0.16.0...v0.17.0) (2026-06-30)
+
+
+### Features
+
+* **macro:** FRED 거시지표 연동으로 시장 국면 분류 및 전략 추천 보강 ([#56](https://github.com/haidj01/finly-agent/issues/56)) ([51970b6](https://github.com/haidj01/finly-agent/commit/51970b60c35c97a6ee44e65f6380cd0e4b2fcd57))
+* **recommender:** add adversarial framing to strategy prompt ([#57](https://github.com/haidj01/finly-agent/issues/57)) ([50fd7b2](https://github.com/haidj01/finly-agent/commit/50fd7b21a8fc64ca6a1f3d20590e1c0fba94cdb7))
+* **recommender:** cash-aware strategy recommendations ([#54](https://github.com/haidj01/finly-agent/issues/54)) ([8678e25](https://github.com/haidj01/finly-agent/commit/8678e25d0f948f30b6ef36ae46c34746e03a41b7))
+* **reflect:** reflect_and_remember — 장 마감 반성 교훈 피드백 루프 ([#58](https://github.com/haidj01/finly-agent/issues/58)) ([0e5f7e7](https://github.com/haidj01/finly-agent/commit/0e5f7e7d4e48f255dfc3651a771e018005b31bb1))
+
 ## [0.16.0](https://github.com/haidj01/finly-agent/compare/v0.15.1...v0.16.0) (2026-05-18)
 
 
