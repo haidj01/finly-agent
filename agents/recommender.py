@@ -12,6 +12,7 @@ import httpx
 
 from market.regime import classify_market_regime
 from alpaca_cfg import trading_url, alpaca_headers
+from db import get_recent_lessons
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +228,12 @@ async def generate_recommendations(symbol: str | None = None) -> dict:
     signals      = details.get("signals", {})
     macro_bias   = details.get("macro", {})
 
-    prompt = _build_prompt(regime, regime_label, details, signals, positions, symbol, account, macro_bias)
+    try:
+        lessons = await get_recent_lessons(limit=5)
+    except Exception:  # pylint: disable=broad-exception-caught
+        lessons = []
+
+    prompt = _build_prompt(regime, regime_label, details, signals, positions, symbol, account, macro_bias, lessons)
 
     for attempt in range(_MAX_RETRIES + 1):
         try:
@@ -339,7 +345,8 @@ def _account_summary(account: dict) -> dict:
 
 def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
                   positions: list, symbol: str | None, account: dict | None = None,
-                  macro_bias: dict | None = None) -> str:
+                  macro_bias: dict | None = None,
+                  lessons: list | None = None) -> str:
     pos_lines = "\n".join(
         f"- {_escape_prompt_field(p['symbol'])}: {float(p['qty']):.0f}주 | 평균단가 ${float(p['avg_entry_price']):.2f} | "
         f"현재가 ${float(p['current_price']):.2f} | 손익 {float(p['unrealized_plpc'])*100:.2f}%"
@@ -397,6 +404,16 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
         else:
             symbol_ctx = f"\n## 대상 종목\nSYMBOL={symbol} (미보유)"
 
+    lessons_lines = ""
+    if lessons:
+        items = "\n".join(
+            f"- [{r.get('trade_date', '?')} | {r.get('regime', '?')}] {r['lesson']}"
+            for r in lessons
+            if r.get("lesson")
+        )
+        if items:
+            lessons_lines = f"\n\n## 과거 교훈 (반드시 반영)\n{items}"
+
     symbol_note = (
         f"대상 종목 {symbol}에 맞는 구체적인 파라미터를 사용하세요."
         if symbol else
@@ -420,7 +437,7 @@ def _build_prompt(regime: str, regime_label: str, details: dict, signals: dict,
 - MACD(12,26,9): 히스토그램={details.get('macd_hist', '-')} ({signals.get('macd_momentum', '-')}){macro_lines}{acct_lines}
 
 ## 현재 보유 포지션
-{pos_lines}{symbol_ctx}
+{pos_lines}{symbol_ctx}{lessons_lines}
 
 ## 요청
 이 시장 국면에서 효과적인 자동매매 전략 3가지를 추천하세요.

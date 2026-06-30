@@ -12,6 +12,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from db import init_db, close_db
 from agents.portfolio import run_portfolio_analysis
+from agents.reflector import run_reflection
 from agents.watchdog import run_watchdog
 from strategies.engine import run_strategy_engine
 from market.regime import classify_market_regime
@@ -74,12 +75,19 @@ async def startup():
     # 워치독 + 전략 엔진: 5분 간격
     scheduler.add_job(run_watchdog,        IntervalTrigger(minutes=5), id="watchdog")
     scheduler.add_job(run_strategy_engine, IntervalTrigger(minutes=5), id="strategy_engine")
+    # 장 마감 반성: 매일 16:05 ET (market close 5분 후)
+    scheduler.add_job(
+        run_reflection,
+        CronTrigger(hour=16, minute=5, timezone="America/New_York"),
+        id="reflect_and_remember",
+    )
 
     scheduler.start()
     print("[finly-agent] 시작됨 — http://localhost:8001")
     print("  · 시장 국면 분류: 매일 08:00 ET")
     print("  · 포트폴리오 분석: 매일 08:30 ET")
     print("  · 워치독 / 전략엔진: 5분 간격")
+    print("  · 장 마감 반성:     매일 16:05 ET")
 
 
 @app.on_event("shutdown")
