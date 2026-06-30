@@ -13,7 +13,7 @@ from db import get_pool
 from alpaca_cfg import trading_url, alpaca_headers
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL   = "claude-sonnet-4-20250514"
+CLAUDE_MODEL   = "claude-sonnet-4-6"
 
 
 def _claude_headers():
