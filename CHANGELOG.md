@@ -1,6 +1,13 @@
 # Changelog
 
 <<<<<<< release-please--branches--main
+## [0.17.1](https://github.com/haidj01/finly-agent/compare/v0.17.0...v0.17.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **claude:** correct model ID from claude-sonnet-4-20250514 to claude-sonnet-4-6 ([#59](https://github.com/haidj01/finly-agent/issues/59)) ([96de46f](https://github.com/haidj01/finly-agent/commit/96de46f8332ae3e144392ee45165299e9c41aa16))
+
 ## [0.17.0](https://github.com/haidj01/finly-agent/compare/v0.16.0...v0.17.0) (2026-06-30)
 
 
